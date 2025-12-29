@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "release_date": "2025-12-30",
+  "download_url": "https://github.com/Jokoril/COCK-profanity-processor/releases/latest",
+  "release_notes": "https://github.com/Jokoril/COCK-profanity-processor/releases/tag/v1.0.0",
+  "minimum_version": "1.0.0",
+  "changelog": [
+    "Initial Portable .exe release"
+  ],
+  "critical": false,
+  "size_mb": 15.2,
+  "platforms": ["windows"],
+  "notes": "Version 1.0.0 Initial release"
+}
