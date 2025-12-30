@@ -173,8 +173,8 @@ pyinstaller build.spec
 ```
 1. Type: "I'm a specialist assassin from Scunthorpe"
 2. Press: F12
-3. See:  Detected words: "specialist", "assassin", "Scunthorpe"
-4. Get:  "I'm a 🅂pecialist 🄰ss🄰ssin from 🅂cuthorpe"
+3. See:  Detected words: "cialis", "ass", "ass", "cunt"
+4. Get:  "Im a spe¢!alist 4ss4ssin from S¢unthorpe"
 5. Send: ✓ Message delivered!
 ```
 ---
