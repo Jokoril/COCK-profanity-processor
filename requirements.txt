@@ -1,0 +1,17 @@
+# Chat Censor Tool - Build Requirements
+# Version: 1.0
+# Install: pip install -r requirements.txt
+
+# Core Dependencies
+pyahocorasick>=2.0.0
+PyQt5>=5.15.0
+keyboard>=0.13.5
+pyperclip>=1.8.2
+psutil>=5.9.0
+
+# Update System (optional - gracefully disabled if missing)
+requests>=2.31.0
+packaging>=23.0
+
+# Build Tool
+PyInstaller>=5.0
