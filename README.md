@@ -59,7 +59,7 @@ Game Output:      "🄰ss🄰ssin, 4nalyze, Bas3ment"
 - **Fast Aho-Corasick algorithm** - Can process 50,000+ entries in miliseconds
 - **Whitelist system** - Whitelist words that get censored standalone but are ignored when embedded
 - **Sliding window detection** - Catches and processes filtered terms that occur across adjacent words, spaces and punctuations
-- **Extended Latin Recognition** - Supports any language that use the Latin script
+- **Extended Latin Recognition** - Supports any language that uses the Latin script
   <img src="https://hatscripts.github.io/circle-flags/flags/gb.svg" height="16" alt="UK">
   <img src="https://hatscripts.github.io/circle-flags/flags/de.svg" height="16" alt="Germany">
   <img src="https://hatscripts.github.io/circle-flags/flags/es.svg" height="16" alt="Spain">
