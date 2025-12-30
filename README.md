@@ -25,7 +25,7 @@
 Ever tried to say **"Assassin"** in game chat and got censored? What about **"Basement"**? Or **"Analyze"**?
 Or other regular phrases that get rejected because the game you're playing has a profanity filter that's just [too f🤬king sensitive?](https://en.wikipedia.org/wiki/Scunthorpe_problem)
 
-Suffer no more, with the power of 🐔!
+Never let your messages get cockblocked again!
 
 COCK is a lightweight desktop tool that intercepts your messages before you send them, detects words that might be filtered, and applies creative text transformations so that your message "complies" with the in game censorship system.
 
