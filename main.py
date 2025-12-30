@@ -25,6 +25,13 @@ import traceback
 import constants
 from typing import Optional
 
+# Fix Windows console encoding for Unicode characters (heart emoji, fancy text, etc.)
+if sys.platform == 'win32':
+    import io
+    # Wrap stdout/stderr with UTF-8 encoding to handle Unicode like ❤
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -1496,7 +1503,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             # Check if detection mode changed - update router and tray menu
             new_mode = self.config.get('detection_mode', 'manual')
             self.log(f"[SETTINGS] Mode check: old='{old_mode}' (from router), new='{new_mode}' (from dialog)")
-            if old_mode != new_mode:
+            if old_mode.lower() != new_mode.lower():  # Case-insensitive
                 self.log(f"Detection mode changed: {old_mode} → {new_mode}")
                 new_mode_enum = mode_router.DetectionMode.MANUAL if new_mode == 'manual' else mode_router.DetectionMode.AUTO
                 self.router.switch_mode(new_mode_enum)

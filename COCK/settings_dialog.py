@@ -503,8 +503,8 @@ if PYQT5_AVAILABLE:
             mode_layout = QVBoxLayout()
             
             self.mode_combo = QComboBox()
-            self.mode_combo.addItems(["Manual", "Auto"])
-            current_mode = self.config.get('detection_mode', 'Manual')
+            self.mode_combo.addItems(["manual", "auto"])
+            current_mode = self.config.get('detection_mode', 'manual')
             self.mode_combo.setCurrentText(current_mode)
             mode_layout.addWidget(QLabel("Mode:"))
             mode_layout.addWidget(self.mode_combo)
