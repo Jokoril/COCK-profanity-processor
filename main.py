@@ -17,8 +17,8 @@ Usage:
     python main.py --debug      # Run with debug output
     python main.py --help       # Show help
 """
+
 import sys
-sys.path.insert(0, 'COCK')
 import os
 import argparse
 import traceback
@@ -28,9 +28,11 @@ from typing import Optional
 # Fix Windows console encoding for Unicode characters (heart emoji, fancy text, etc.)
 if sys.platform == 'win32':
     import io
-    # Wrap stdout/stderr with UTF-8 encoding to handle Unicode like ❤
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    # Only wrap stdout/stderr if they exist (they're None when console=False in .exe)
+    if sys.stdout is not None and hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if sys.stderr is not None and hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -53,10 +55,6 @@ import fancy_text
 import shorthand_handler
 import message_optimizer
 import mode_router
-
-# Import Phase 3.5 modules (update/help systems)
-import update_checker
-import help_manager
 
 # Import Phase 4 modules (with graceful fallback)
 import overlay_manual  # Renamed from overlay_strict
@@ -248,8 +246,6 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         self.force_hotkey = None
         self.toggle_hotkey = None  # Hotkey to toggle optimization hotkeys on/off
         self.clipboard = None
-        self.update_checker = None  # Update checker
-        self.help_manager = None    # Help/documentation manager
         
         # UI components
         self.manual_overlay = None  # Renamed from strict_overlay
@@ -404,17 +400,6 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                 self.config, self.detector, self.optimizer,
                 self.wl_manager
             )
-            
-            # Phase 3.5: Update checker & help manager
-            self.log("Initializing update checker and help manager...")
-            
-            # Initialize update checker
-            self.update_checker = update_checker.UpdateChecker(self.config)
-            self.log(f"Update checker initialized (available: {self.update_checker.available})")
-            
-            # Initialize help manager
-            self.help_manager = help_manager.HelpManager(self.config)
-            self.log(f"Help manager initialized (available: {self.help_manager.available})")
             
             # Phase 4: UI will be initialized in run() after QApplication is created
             
@@ -1503,9 +1488,10 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             # Check if detection mode changed - update router and tray menu
             new_mode = self.config.get('detection_mode', 'manual')
             self.log(f"[SETTINGS] Mode check: old='{old_mode}' (from router), new='{new_mode}' (from dialog)")
-            if old_mode.lower() != new_mode.lower():  # Case-insensitive
-                self.log(f"Detection mode changed: {old_mode} → {new_mode}")
-                new_mode_enum = mode_router.DetectionMode.MANUAL if new_mode == 'manual' else mode_router.DetectionMode.AUTO
+            # Normalize to lowercase for comparison (Qt may capitalize display text)
+            if old_mode.lower() != new_mode.lower():
+                self.log(f"Detection mode changed: {old_mode} -> {new_mode}")
+                new_mode_enum = mode_router.DetectionMode.MANUAL if new_mode.lower() == 'manual' else mode_router.DetectionMode.AUTO
                 self.router.switch_mode(new_mode_enum)
                 self.log(f"[SETTINGS] Router mode switched to {new_mode_enum}")
                 # Update tray menu checkboxes
@@ -2019,62 +2005,6 @@ Optimization:
                 # Show settings window after splash screen fades out completely
                 # Splash duration is 3000ms, so delay 3200ms to ensure fade is complete
                 QTimer.singleShot(3200, self.show_settings)
-                
-                # Check for updates after app fully starts (non-blocking)
-                def on_update_available(version_info):
-                    """Called when update is available"""
-                    if not version_info:
-                        return  # No update or error
-                    
-                    try:
-                        latest = version_info.get('version', 'Unknown')
-                        download_url = version_info.get('download_url', '')
-                        is_critical = version_info.get('critical', False)
-                        changelog = version_info.get('changelog', [])
-                        
-                        # Format changelog
-                        changelog_text = '\n'.join(f"- {item}" for item in changelog[:3])
-                        if len(changelog) > 3:
-                            changelog_text += f"\n... and {len(changelog) - 3} more"
-                        
-                        # Show notification
-                        title = "⚠️ Critical Update Available" if is_critical else "Update Available"
-                        message = (
-                            f"Version {latest} is available!\n\n"
-                            f"{changelog_text}\n\n"
-                            "Click to download"
-                        )
-                        
-                        # Show notification with icon
-                        if self.tray_icon:
-                            self.tray_icon.showMessage(
-                                title,
-                                message,
-                                self.tray_icon.icon(),
-                                10000  # 10 seconds
-                            )
-                        
-                        # Handle click - open download page
-                        def open_download():
-                            if self.help_manager:
-                                self.help_manager.open_custom_url(download_url)
-                        
-                        # Connect message clicked signal
-                        if self.tray_icon:
-                            try:
-                                self.tray_icon.messageClicked.disconnect()
-                            except:
-                                pass
-                            self.tray_icon.messageClicked.connect(open_download)
-                        
-                        self.log(f"Update notification shown: v{latest}")
-                    
-                    except Exception as e:
-                        print(f"[MAIN] Error showing update notification: {e}")
-                
-                # Check for updates after 3 seconds (let app fully start)
-                QTimer.singleShot(3000, lambda: self.update_checker.check_for_updates(on_update_available))
-                self.log("Update check scheduled")
                 
                 # Run event loop
                 return self.app.exec_()
