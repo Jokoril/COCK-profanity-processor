@@ -1,0 +1,5 @@
+# COCK Profanity Processor - Filter Word List
+# Add filtered words here, one per line
+# Example:
+# badword
+# anotherbadword

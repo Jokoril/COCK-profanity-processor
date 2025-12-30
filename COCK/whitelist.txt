@@ -1,0 +1,4 @@
+# Whitelist - Words safe when embedded
+# These words are NOT flagged when found embedded in larger words
+# Example: 'ass' is safe in 'assassin' but flagged when standalone
+

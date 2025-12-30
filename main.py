@@ -17,8 +17,8 @@ Usage:
     python main.py --debug      # Run with debug output
     python main.py --help       # Show help
 """
-
 import sys
+sys.path.insert(0, 'COCK')
 import os
 import argparse
 import traceback

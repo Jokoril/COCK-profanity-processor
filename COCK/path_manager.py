@@ -9,6 +9,7 @@ Features:
 - Detects if running as .exe or Python script
 - Provides consistent paths across modes
 - Handles PyInstaller _MEIPASS for bundled resources
+- Works correctly when in cct/ package folder
 """
 
 import sys
@@ -23,7 +24,7 @@ def get_app_dir():
         str: Directory path where application files should be stored
         
     Behavior:
-        - Development: Directory containing the Python script
+        - Development: Project root directory (parent of cct/ folder)
         - .exe: Directory containing the .exe file
     """
     if getattr(sys, 'frozen', False):
@@ -32,8 +33,11 @@ def get_app_dir():
         return os.path.dirname(sys.executable)
     else:
         # Running as Python script
-        # __file__ is the path to this module
-        return os.path.dirname(os.path.abspath(__file__))
+        # __file__ is cct/path_manager.py
+        # Go up TWO levels to get to project root
+        module_dir = os.path.dirname(os.path.abspath(__file__))  # cct/
+        project_root = os.path.dirname(module_dir)                # project root
+        return project_root
 
 
 def get_data_file(filename):
@@ -92,7 +96,7 @@ def get_bundled_resource(filename):
         
     Behavior:
         - .exe mode: PyInstaller extracts bundled files to temporary _MEIPASS folder
-        - Development: Uses the script directory
+        - Development: Uses the project root directory
         
     Use this for:
         - Default config templates
@@ -103,8 +107,8 @@ def get_bundled_resource(filename):
         # Running as .exe - use PyInstaller's temporary extraction folder
         base_path = sys._MEIPASS
     else:
-        # Running as script - use script directory
-        base_path = os.path.dirname(os.path.abspath(__file__))
+        # Running as script - use project root (not cct/ folder)
+        base_path = get_app_dir()
     
     return os.path.join(base_path, filename)
 
@@ -167,10 +171,10 @@ def get_resource_file(filename):
         return os.path.join(base_path, 'resources', filename)
     else:
         # Running as script - try different possible locations
+        app_dir = get_app_dir()  # Now returns project root
         possible_paths = [
-            os.path.join(get_app_dir(), 'resources', filename),
+            os.path.join(app_dir, 'resources', filename),
             os.path.join(os.getcwd(), 'resources', filename),
-            os.path.join(os.path.dirname(__file__), 'resources', filename),
         ]
         
         for path in possible_paths:
@@ -182,5 +186,5 @@ def get_resource_file(filename):
 
 
 # Module information
-__version__ = '1.0.0'
-__author__ = 'Jokoril'
+__version__ = '1.0.1'  # Updated for cct/ package structure
+__author__ = 'Chat Censor Tool Team'
