@@ -257,6 +257,6 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 *Because "Raid Spam" shouldn't be fucking censored.*
 
-[⬆ Back to Top](#features)
+[⬆ Back to Top](#-about-cock)
 
 </div>****
