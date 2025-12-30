@@ -4,7 +4,7 @@
     <img src="https://files.catbox.moe/7kgdti.png" alt="Logo" width="551" height="149">
   </a>
 
-<h3 align="center">An online chat profanity processor for oppressed gamers</h3>
+<h3 align="center">A profanity processor for oppressed gamers</h3>
 
 <div align="center">
 
