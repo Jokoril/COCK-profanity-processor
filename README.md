@@ -181,7 +181,7 @@ pyinstaller build.spec
 
 # 🚧 Limitations
 ### 🔡 No non-Latin support
-COCK does not support languages that use non-Latin characters, such as CJK, Thai, Cyrillic,, etc.
+COCK does not support languages that use non-Latin characters, such as CJK, Thai, Cyrillic, etc.
 
 ### ⌨️ Needs Keyboard Shortcut Recognition
 COCK will only work on games that detect and support keyboard shortcuts in the chat box:
