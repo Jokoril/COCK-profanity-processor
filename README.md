@@ -189,6 +189,10 @@ COCK will only work on games that detect and support keyboard shortcuts in the c
 - Copy Text `Ctrl + C`
 - Paste Text `Ctrl + V`
 - Send `Enter`
+  
+### 📑 Requires Input Data
+COCK requires you to source your own filtered word data for accurate profanity prediction and processing.
+Different games will have different lists and tolerances, so either consult your local game community dataminer, search online, or build your own list suited for your games, using the pre-bundled template.
 
 ### 👻 Some Censorship Systems Are Haunted
 You may still run into cases where games randomly censor parts of your message that do not trigger any actual filter hits.
