@@ -1,4 +1,3 @@
-<img width="2153" height="231" alt="image" src="https://github.com/user-attachments/assets/216faa61-504e-4c06-9a2c-60ace36abe1b" /><br/>
 <div align="center">
   <a href="https://github.com/Jokoril/COCK-profanity-processor">
     <img src="https://files.catbox.moe/7kgdti.png" alt="Logo" width="551" height="149">
