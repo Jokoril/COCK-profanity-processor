@@ -1,5 +1,5 @@
 """
-Update Checker Module for COCK Profanity Processor
+Update Checker Module for Chat Censor Tool
 
 Checks for application updates from GitHub-hosted version.json file.
 Non-blocking, privacy-friendly, opt-out available.
@@ -41,7 +41,7 @@ class UpdateChecker:
     
     # Configuration
     VERSION_URL = "https://raw.githubusercontent.com/Jokoril/COCK-profanity-processor/main/version.json"
-    CURRENT_VERSION = "1.0.0"
+    CURRENT_VERSION = "1.0.0"  # Updated to match production version
     TIMEOUT_SECONDS = 5
     
     def __init__(self, config: dict):
@@ -81,172 +81,166 @@ class UpdateChecker:
         thread.daemon = True
         thread.start()
     
-    def _check_thread(self, callback: Optional[Callable[[Optional[Dict[str, Any]]], None]]):
-        """
-        Background thread for update check
-        
-        Args:
-            callback: Function to call with results
-        """
+    def _check_thread(self, callback: Optional[Callable]):
+        """Background thread for checking updates"""
         try:
             print(f"[UPDATE] Checking for updates from {self.VERSION_URL}")
             
-            # HTTP GET with timeout
+            # Fetch version info
             response = requests.get(self.VERSION_URL, timeout=self.TIMEOUT_SECONDS)
             response.raise_for_status()
             
-            # Parse JSON
             version_info = response.json()
             
-            # Validate required fields
-            if 'version' not in version_info:
-                print("[UPDATE] Error: version.json missing 'version' field")
-                if callback:
-                    callback(None)
-                return
-            
-            latest = version_info.get('version', '0.0.0')
-            
-            print(f"[UPDATE] Current: {self.CURRENT_VERSION}, Latest: {latest}")
+            # Update last check time
+            self.last_check = datetime.now().isoformat()
+            if 'updates' not in self.config:
+                self.config['updates'] = {}
+            self.config['updates']['last_check'] = self.last_check
             
             # Compare versions
-            if self._is_newer_version(latest, self.CURRENT_VERSION):
-                print(f"[UPDATE] Update available: {latest}")
-                
-                # Update last check timestamp
-                self._update_last_check()
-                
-                # Call callback with version info
+            remote_version = version_info.get('version', '0.0.0')
+            
+            if self._is_newer_version(remote_version, self.CURRENT_VERSION):
+                print(f"[UPDATE] New version available: {remote_version} (current: {self.CURRENT_VERSION})")
                 if callback:
                     callback(version_info)
             else:
-                print("[UPDATE] Already up to date")
-                
-                # Update last check timestamp
-                self._update_last_check()
-                
+                print(f"[UPDATE] Already on latest version: {self.CURRENT_VERSION}")
                 if callback:
                     callback(None)
         
-        except requests.exceptions.Timeout:
-            print(f"[UPDATE] Check timed out after {self.TIMEOUT_SECONDS}s")
-            if callback:
-                callback(None)
-        
-        except requests.exceptions.RequestException as e:
-            print(f"[UPDATE] Network error: {e}")
-            if callback:
-                callback(None)
-        
-        except json.JSONDecodeError as e:
-            print(f"[UPDATE] Invalid JSON in version.json: {e}")
+        except requests.RequestException as e:
+            print(f"[UPDATE] Network error checking for updates: {e}")
             if callback:
                 callback(None)
         
         except Exception as e:
-            print(f"[UPDATE] Unexpected error: {e}")
+            print(f"[UPDATE] Error checking for updates: {e}")
             if callback:
                 callback(None)
     
-    def _is_newer_version(self, latest: str, current: str) -> bool:
+    def _is_newer_version(self, remote: str, current: str) -> bool:
         """
         Compare version strings
         
         Args:
-            latest: Latest version string (e.g., "5.1.0")
-            current: Current version string (e.g., "5.0.0")
+            remote: Remote version string (e.g., "1.1.0")
+            current: Current version string (e.g., "1.0.0")
             
         Returns:
-            True if latest > current
+            bool: True if remote is newer than current
         """
         if PACKAGING_AVAILABLE:
-            # Use packaging library for proper semantic versioning
             try:
-                return version.parse(latest) > version.parse(current)
+                return version.parse(remote) > version.parse(current)
             except Exception as e:
-                print(f"[UPDATE] Version parsing error: {e}")
+                print(f"[UPDATE] Error parsing versions: {e}")
                 return False
         else:
-            # Fall back to simple string comparison
-            # Works for X.Y.Z format if all numbers
+            # Simple string comparison fallback
             try:
-                latest_parts = [int(x) for x in latest.split('.')]
+                remote_parts = [int(x) for x in remote.split('.')]
                 current_parts = [int(x) for x in current.split('.')]
-                return latest_parts > current_parts
+                
+                # Pad with zeros if needed
+                while len(remote_parts) < len(current_parts):
+                    remote_parts.append(0)
+                while len(current_parts) < len(remote_parts):
+                    current_parts.append(0)
+                
+                # Compare
+                for r, c in zip(remote_parts, current_parts):
+                    if r > c:
+                        return True
+                    elif r < c:
+                        return False
+                
+                return False  # Equal versions
+            
             except Exception as e:
-                print(f"[UPDATE] Version comparison error: {e}")
+                print(f"[UPDATE] Error comparing versions: {e}")
                 return False
     
-    def _update_last_check(self):
-        """Update last check timestamp in config"""
-        try:
-            if 'updates' not in self.config:
-                self.config['updates'] = {}
-            
-            self.config['updates']['last_check'] = datetime.now().isoformat()
-            self.last_check = self.config['updates']['last_check']
-            
-            # Note: Config saving handled by main application
-            print(f"[UPDATE] Last check timestamp updated")
-        
-        except Exception as e:
-            print(f"[UPDATE] Failed to update last check timestamp: {e}")
-    
-    def get_last_check_time(self) -> Optional[str]:
+    def check_now_sync(self) -> Optional[Dict[str, Any]]:
         """
-        Get human-readable last check time
+        Check for updates synchronously (blocking)
         
         Returns:
-            Formatted string like "2 hours ago" or None
+            dict: Version info if update available, None otherwise
         """
-        if not self.last_check:
+        if not self.available:
+            print("[UPDATE] Update check skipped (disabled or dependencies missing)")
             return None
         
         try:
-            last = datetime.fromisoformat(self.last_check)
-            now = datetime.now()
-            delta = now - last
+            print(f"[UPDATE] Checking for updates from {self.VERSION_URL}")
             
-            # Format time delta
-            if delta.days > 0:
-                return f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
-            elif delta.seconds >= 3600:
-                hours = delta.seconds // 3600
-                return f"{hours} hour{'s' if hours > 1 else ''} ago"
-            elif delta.seconds >= 60:
-                minutes = delta.seconds // 60
-                return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+            response = requests.get(self.VERSION_URL, timeout=self.TIMEOUT_SECONDS)
+            response.raise_for_status()
+            
+            version_info = response.json()
+            remote_version = version_info.get('version', '0.0.0')
+            
+            if self._is_newer_version(remote_version, self.CURRENT_VERSION):
+                print(f"[UPDATE] New version available: {remote_version}")
+                return version_info
             else:
-                return "just now"
+                print(f"[UPDATE] Already on latest version: {self.CURRENT_VERSION}")
+                return None
+        
+        except requests.RequestException as e:
+            print(f"[UPDATE] Network error: {e}")
+            return None
         
         except Exception as e:
-            print(f"[UPDATE] Error formatting last check time: {e}")
+            print(f"[UPDATE] Error: {e}")
             return None
     
-    @staticmethod
-    def get_current_version() -> str:
-        """Get current application version"""
-        return UpdateChecker.CURRENT_VERSION
+    def get_release_notes(self, version_info: Dict[str, Any]) -> str:
+        """
+        Extract release notes from version info
+        
+        Args:
+            version_info: Version info dict from server
+            
+        Returns:
+            str: Release notes text
+        """
+        notes = version_info.get('release_notes', '')
+        if not notes:
+            notes = version_info.get('changelog', 'No release notes available.')
+        
+        return notes
     
-    @staticmethod
-    def is_available() -> bool:
-        """Check if update checker is available (dependencies installed)"""
-        return REQUESTS_AVAILABLE
-
-
-# Example version.json structure for reference:
-"""
-{
-  "version": "1.1.0",
-  "release_date": "2024-12-31",
-  "download_url": "https://github.com/Jokoril/COCK-profanity-processor/releases/latest",
-  "release_notes": "https://github.com/Jokoril/COCK-profanity-processor/releases/tag/v1.1.0",
-  "minimum_version": "1.0.0",
-  "changelog": [
-    "Security improvements",
-    "Performance optimizations",
-    "Bug fixes"
-  ],
-  "critical": false
-}
-"""
+    def get_download_url(self, version_info: Dict[str, Any]) -> str:
+        """
+        Extract download URL from version info
+        
+        Args:
+            version_info: Version info dict from server
+            
+        Returns:
+            str: Download URL
+        """
+        return version_info.get('download_url', 'https://github.com/Jokoril/COCK-profanity-processor/releases/latest')
+    
+    def disable_checks(self):
+        """Disable automatic update checks"""
+        self.check_enabled = False
+        if 'updates' not in self.config:
+            self.config['updates'] = {}
+        self.config['updates']['check_enabled'] = False
+        print("[UPDATE] Update checks disabled")
+    
+    def enable_checks(self):
+        """Enable automatic update checks"""
+        if REQUESTS_AVAILABLE:
+            self.check_enabled = True
+            self.available = True
+            if 'updates' not in self.config:
+                self.config['updates'] = {}
+            self.config['updates']['check_enabled'] = True
+            print("[UPDATE] Update checks enabled")
+        else:
+            print("[UPDATE] Cannot enable - 'requests' module not installed")

@@ -22,7 +22,6 @@ import sys
 import os
 import argparse
 import traceback
-import constants
 from typing import Optional
 
 # Fix Windows console encoding for Unicode characters (heart emoji, fancy text, etc.)
@@ -34,10 +33,11 @@ if sys.platform == 'win32':
     if sys.stderr is not None and hasattr(sys.stderr, 'buffer'):
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add COCK directory to path (all modules are in COCK folder)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'COCK'))
 
 # Import Phase 1 modules
+import constants
 import path_manager
 import permission_manager
 import config_loader
@@ -60,6 +60,10 @@ import mode_router
 import overlay_manual  # Renamed from overlay_strict
 # overlay_permissive removed - no longer used (replaced with auto mode)
 import settings_dialog
+
+# Import Phase 5 modules (update and help systems)
+import update_checker
+import help_manager
 
 # For console window control on Windows
 if sys.platform == 'win32':
@@ -401,7 +405,18 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                 self.wl_manager
             )
             
-            # Phase 4: UI will be initialized in run() after QApplication is created
+            # Phase 4: Update and help systems
+            self.log("Initializing update checker and help system...")
+            
+            # Initialize update checker
+            self.update_checker = update_checker.UpdateChecker(self.config)
+            self.log("Update checker initialized")
+            
+            # Initialize help manager
+            self.help_manager = help_manager.HelpManager(self.config)
+            self.log("Help manager initialized")
+            
+            # Phase 5: UI will be initialized in run() after QApplication is created
             
             self.log("All modules initialized successfully")
             return True
@@ -1433,12 +1448,18 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
     
     def show_settings(self):
         """Show settings dialog (non-modal)"""
+        self.log("show_settings() called")  # Debug
+        
         if not PYQT5_AVAILABLE:
+            self.log("PyQt5 not available, cannot show settings")
             return
         
         try:
+            self.log("Creating settings dialog...")
+            
             # If settings dialog already exists and is visible, just bring it to front
             if hasattr(self, 'settings_dialog_instance') and self.settings_dialog_instance and self.settings_dialog_instance.isVisible():
+                self.log("Settings dialog already visible, bringing to front")
                 self.settings_dialog_instance.raise_()
                 self.settings_dialog_instance.activateWindow()
                 return
@@ -1449,20 +1470,32 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                 'load_time_ms': 0
             }
             
-            # Create non-modal dialog
-            self.settings_dialog_instance = settings_dialog.SettingsDialog(self.config, filter_stats)
+            self.log(f"Filter stats: {filter_stats}")
             
+            # Create non-modal dialog with parent reference for update_checker and help_manager access
+            self.log("Instantiating SettingsDialog...")
+            # Use self.app as parent (QApplication can parent dialogs), and pass self as reference for accessing update_checker/help_manager
+            self.settings_dialog_instance = settings_dialog.SettingsDialog(self.config, filter_stats, parent=None)
+            # Store reference to main app so settings can access update_checker and help_manager
+            self.settings_dialog_instance.main_app = self
+            
+            self.log("Connecting signals...")
             # Connect signals
             self.settings_dialog_instance.settings_saved.connect(self.on_settings_saved)
             self.settings_dialog_instance.finished.connect(self.on_settings_closed)
             
+            self.log("Showing dialog...")
             # Show as non-modal (doesn't block other windows)
             self.settings_dialog_instance.show()
             self.settings_dialog_instance.raise_()
             self.settings_dialog_instance.activateWindow()
             
+            self.log("Settings dialog shown successfully")
+            
         except Exception as e:
-            print(f"ERROR: Settings dialog failed: {e}")
+            self.log(f"ERROR: Settings dialog failed: {e}")
+            import traceback
+            self.log(traceback.format_exc())  # Log full traceback to debug console
     
     def on_settings_saved(self, needs_restart):
         """
@@ -2004,6 +2037,7 @@ Optimization:
 
                 # Show settings window after splash screen fades out completely
                 # Splash duration is 3000ms, so delay 3200ms to ensure fade is complete
+                self.log("Scheduling auto-show settings in 3200ms...")
                 QTimer.singleShot(3200, self.show_settings)
                 
                 # Run event loop

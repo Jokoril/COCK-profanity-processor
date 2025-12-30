@@ -282,15 +282,16 @@ if PYQT5_AVAILABLE:
         # Args: needs_restart (bool) - True if app needs restart
         settings_saved = pyqtSignal(bool)
         
-        def __init__(self, config: dict, filter_stats: dict = None):
+        def __init__(self, config: dict, filter_stats: dict = None, parent=None):
             """
             Initialize settings dialog
             
             Args:
                 config: Current configuration dictionary
                 filter_stats: Statistics from filter loader (optional)
+                parent: Parent widget (ChatCensorTool instance) for accessing update_checker and help_manager
             """
-            super().__init__()
+            super().__init__(parent)
             
             self.config = config.copy()  # Work with a copy
             self.filter_stats = filter_stats or {}
@@ -609,9 +610,9 @@ if PYQT5_AVAILABLE:
             
             # Last check info
             last_check = None
-            if hasattr(self.parent(), 'update_checker'):
+            if hasattr(getattr(self, "main_app", None), 'update_checker'):
                 try:
-                    last_check = self.parent().update_checker.get_last_check_time()
+                    last_check = getattr(self, "main_app", None).update_checker.get_last_check_time()
                 except:
                     pass
             
@@ -648,11 +649,11 @@ if PYQT5_AVAILABLE:
         def _check_updates_now(self):
             """Manual update check"""
             from PyQt5.QtWidgets import QProgressDialog, QMessageBox
-            from PyQt5.QtCore import Qt
+            from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
             
             try:
-                # Get update checker from parent
-                if not hasattr(self.parent(), 'update_checker'):
+                # Get update checker from main app
+                if not hasattr(getattr(self, "main_app", None), 'update_checker'):
                     QMessageBox.warning(
                         self,
                         "Update Check Unavailable",
@@ -660,79 +661,113 @@ if PYQT5_AVAILABLE:
                     )
                     return
                 
-                update_checker_obj = self.parent().update_checker
+                update_checker_obj = getattr(self, "main_app", None).update_checker
                 
-                # Show checking dialog
-                progress = QProgressDialog("Checking for updates...", "Cancel", 0, 0, self)
+                # Create signal helper for thread-safe communication
+                class ResultSignal(QObject):
+                    finished = pyqtSignal(object)
+                
+                signal_helper = ResultSignal()
+                
+                # Show non-modal progress dialog
+                progress = QProgressDialog("Checking for updates...", None, 0, 0, self)
                 progress.setWindowTitle("Update Check")
-                progress.setWindowModality(Qt.WindowModal)
-                progress.setCancelButton(None)  # No cancel button
+                progress.setWindowModality(Qt.NonModal)  # Non-modal so event loop isn't blocked!
+                progress.setCancelButton(None)
+                progress.setMinimumDuration(0)
+                progress.setValue(0)
                 progress.show()
+                self.update()  # Force UI update
+                
+                def show_result(version_info):
+                    """Handle result - runs in main thread via signal"""
+                    try:
+                        progress.close()
+                        
+                        if version_info:
+                            # Update available
+                            try:
+                                import update_checker
+                                latest = version_info.get('version', 'Unknown')
+                                current = update_checker.UpdateChecker.CURRENT_VERSION
+                                changelog = version_info.get('changelog', [])
+                                download_url = version_info.get('download_url', '')
+                                
+                                changelog_text = '\n'.join(f"• {item}" for item in changelog)
+                                
+                                msg = QMessageBox(self)
+                                msg.setWindowTitle("Update Available")
+                                msg.setIcon(QMessageBox.Information)
+                                msg.setText(f"<h3>Version {latest} is available!</h3>")
+                                msg.setInformativeText(
+                                    f"<b>Current:</b> {current}<br>"
+                                    f"<b>Latest:</b> {latest}<br><br>"
+                                    f"<b>Changes:</b><br>{changelog_text}"
+                                )
+                                msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+                                msg.button(QMessageBox.Ok).setText("Download")
+                                msg.button(QMessageBox.Cancel).setText("Later")
+                                
+                                result = msg.exec_()
+                                
+                                if result == QMessageBox.Ok:
+                                    if hasattr(getattr(self, 'main_app', None), 'help_manager'):
+                                        getattr(self, 'main_app', None).help_manager.open_custom_url(download_url)
+                                
+                                last_check = update_checker_obj.get_last_check_time()
+                                if last_check and hasattr(self, 'last_check_label'):
+                                    self.last_check_label.setText(f"Last checked: {last_check}")
+                            except Exception as e:
+                                print(f"[SETTINGS] Error showing update dialog: {e}")
+                                import traceback
+                                traceback.print_exc()
+                        else:
+                            # Up to date or error
+                            try:
+                                import update_checker
+                                current = update_checker.UpdateChecker.CURRENT_VERSION
+                                
+                                QMessageBox.information(
+                                    self,
+                                    "Up to Date",
+                                    f"You're running the latest version!\n\n"
+                                    f"Current version: {current}"
+                                )
+                                
+                                last_check = update_checker_obj.get_last_check_time()
+                                if last_check and hasattr(self, 'last_check_label'):
+                                    self.last_check_label.setText(f"Last checked: {last_check}")
+                            except Exception as e:
+                                print(f"[SETTINGS] Error showing up-to-date dialog: {e}")
+                                import traceback
+                                traceback.print_exc()
+                    except Exception as e:
+                        print(f"[SETTINGS] Error in show_result: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # Connect signal (auto-connection to main thread)
+                signal_helper.finished.connect(show_result)
                 
                 def on_result(version_info):
-                    """Handle update check result"""
-                    progress.close()
-                    
-                    if version_info:
-                        # Update available
-                        try:
-                            import update_checker
-                            latest = version_info.get('version', 'Unknown')
-                            current = update_checker.UpdateChecker.CURRENT_VERSION
-                            changelog = version_info.get('changelog', [])
-                            download_url = version_info.get('download_url', '')
-                            
-                            # Format changelog
-                            changelog_text = '\n'.join(f"• {item}" for item in changelog)
-                            
-                            msg = QMessageBox(self)
-                            msg.setWindowTitle("Update Available")
-                            msg.setIcon(QMessageBox.Information)
-                            msg.setText(f"<h3>Version {latest} is available!</h3>")
-                            msg.setInformativeText(
-                                f"<b>Current:</b> {current}<br>"
-                                f"<b>Latest:</b> {latest}<br><br>"
-                                f"<b>Changes:</b><br>{changelog_text}"
-                            )
-                            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-                            msg.button(QMessageBox.Ok).setText("Download")
-                            msg.button(QMessageBox.Cancel).setText("Later")
-                            
-                            result = msg.exec_()
-                            
-                            if result == QMessageBox.Ok:
-                                # Open download page
-                                if hasattr(self.parent(), 'help_manager'):
-                                    self.parent().help_manager.open_custom_url(download_url)
-                            
-                            # Update last check label
-                            last_check = update_checker_obj.get_last_check_time()
-                            if last_check and hasattr(self, 'last_check_label'):
-                                self.last_check_label.setText(f"Last checked: {last_check}")
-                        except Exception as e:
-                            print(f"[SETTINGS] Error showing update dialog: {e}")
-                    else:
-                        # Up to date or error
-                        try:
-                            import update_checker
-                            current = update_checker.UpdateChecker.CURRENT_VERSION
-                            
-                            QMessageBox.information(
-                                self,
-                                "Up to Date",
-                                f"You're running the latest version!\n\n"
-                                f"Current version: {current}"
-                            )
-                            
-                            # Update last check label
-                            last_check = update_checker_obj.get_last_check_time()
-                            if last_check and hasattr(self, 'last_check_label'):
-                                self.last_check_label.setText(f"Last checked: {last_check}")
-                        except Exception as e:
-                            print(f"[SETTINGS] Error showing up-to-date dialog: {e}")
+                    """Called from background thread - emit signal"""
+                    signal_helper.finished.emit(version_info)
                 
-                # Check for updates (async)
+                # Start async check
                 update_checker_obj.check_for_updates(on_result)
+            
+            except Exception as e:
+                print(f"[SETTINGS] Error checking updates: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    QMessageBox.critical(
+                        self,
+                        "Update Check Failed",
+                        f"Failed to check for updates:\n{str(e)}"
+                    )
+                except:
+                    pass
             
             except Exception as e:
                 print(f"[SETTINGS] Error checking updates: {e}")
@@ -1705,7 +1740,7 @@ if PYQT5_AVAILABLE:
             desc_font.setPointSize(12)
             desc.setFont(desc_font)
             desc.setReadOnly(True)
-            desc.setMaximumHeight(400)
+            desc.setMaximumHeight(600)
             desc.setHtml(
                 "<b>COCK helps you resolve over-sensitive game chat censorship by:</b><br><br>"
                 "• Detecting filtered words before you send messages<br>"
@@ -1720,12 +1755,12 @@ if PYQT5_AVAILABLE:
                 "• Manual & Automatic modes<br>"
                 "• Completely offline and external operation, safe for online games<br>"
                 "<br>"
-                "<b>USER AGREEMENT:</b><br>"
+                "<b>DISCLAIMER:</b><br>"
                 "<br>"
-                "By using this application, you agree:<br>"
-                "• To use this tool for responsible online communication<br>" 
-                "• To not engage in abusive, toxic and hateful speech against other players<br>"
-                "• To take full responsibility for any consequences borne out of misuse or abuse of this tool"
+                "By using this application, you acknowledge:<br>"
+                "<br>"
+                "• You are resposible for the content of your own online communications <br>"
+                "• The author is not liable for any consequences resulting from abuse of the tool"
             )
             layout.addWidget(desc)
             
@@ -1734,7 +1769,7 @@ if PYQT5_AVAILABLE:
             help_layout = QVBoxLayout()
             
             # Help text
-            help_text = QLabel("Need help? Access documentation and resources:")
+            help_text = QLabel("Links and documentation:")
             help_text.setWordWrap(True)
             help_layout.addWidget(help_text)
             
@@ -1751,19 +1786,19 @@ if PYQT5_AVAILABLE:
             start_btn.setToolTip("Quick start guide")
             start_btn.clicked.connect(lambda: self._open_help('getting_started'))
             
-            # FAQ button
-            faq_btn = QPushButton("❓ FAQ")
-            faq_btn.setToolTip("Frequently asked questions")
-            faq_btn.clicked.connect(lambda: self._open_help('faq'))
+            # Ko-fi button
+            kofi_btn = QPushButton("☕ Buy me a coffee")
+            kofi_btn.setToolTip("Fuel my caffeine addiction")
+            kofi_btn.clicked.connect(lambda: self._open_help('kofi'))
             
             # Report Issue button
-            issue_btn = QPushButton("🐛 Report Issue")
+            issue_btn = QPushButton("🐞 Feedback")
             issue_btn.setToolTip("Report a bug or request a feature")
             issue_btn.clicked.connect(lambda: self._open_help('new_issue'))
             
             button_layout.addWidget(docs_btn)
             button_layout.addWidget(start_btn)
-            button_layout.addWidget(faq_btn)
+            button_layout.addWidget(kofi_btn)
             button_layout.addWidget(issue_btn)
             
             help_layout.addLayout(button_layout)
@@ -1788,8 +1823,8 @@ if PYQT5_AVAILABLE:
             """
             try:
                 # Get help manager from parent (main application)
-                if hasattr(self.parent(), 'help_manager'):
-                    success = self.parent().help_manager.open_url(help_key)
+                if hasattr(getattr(self, "main_app", None), 'help_manager'):
+                    success = getattr(self, "main_app", None).help_manager.open_url(help_key)
                     if success:
                         print(f"[SETTINGS] Opened help: {help_key}")
                     else:

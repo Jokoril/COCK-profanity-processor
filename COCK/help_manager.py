@@ -31,6 +31,7 @@ class HelpManager:
     
     # GitHub URLs (update with your actual repository)
     GITHUB_REPO = "https://github.com/Jokoril/COCK-profanity-processor"
+    KOFI_LINK = "https://ko-fi.com/jokoril"
     
     # Documentation URLs
     URLS = {
@@ -52,7 +53,9 @@ class HelpManager:
         
         # Wiki (if available)
         'wiki': f"{GITHUB_REPO}/wiki",
-        'faq': f"{GITHUB_REPO}/wiki/FAQ",
+
+        # Ko-fi page
+        'kofi': f"{KOFI_LINK}",
         
         # Usage guides
         'whitelist_guide': f"{GITHUB_REPO}/blob/main/docs/WHITELIST_GUIDE.md",
@@ -184,9 +187,9 @@ class HelpManager:
         """Open troubleshooting guide"""
         return self.open_url('troubleshooting')
     
-    def open_faq(self) -> bool:
-        """Open FAQ page"""
-        return self.open_url('faq')
+    def open_kofi(self) -> bool:
+        """Open Ko-Fi page"""
+        return self.open_url('kofi')
     
     @staticmethod
     def is_available() -> bool:
