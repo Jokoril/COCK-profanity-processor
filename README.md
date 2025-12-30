@@ -49,6 +49,17 @@ Optimization:     "🄰ss, "4nal, "s3men"
 
 Game Output:      "🄰ss🄰ssin, 4nalyze, Bas3ment"
 ```
+</div>
+   <div align="center">
+   <details>
+   <summary><h1>🖼️ Screenshots</h1></summary>
+   <img src="https://files.catbox.moe/l9vqjo.png" height="420" alt="2">
+   <img src="https://files.catbox.moe/93ahjn.png" height="420" alt="5">
+   <img src="https://files.catbox.moe/iifccu.png" height="420" alt="4">
+   <img src="https://files.catbox.moe/7j086s.png" height="420" alt="3">
+   <img src="https://files.catbox.moe/q0uvb1.png" height="420" alt="1">
+</details>
+</div>
 
 ---
 
@@ -163,10 +174,8 @@ pyinstaller build.spec
 
 1. **Type your message** in any application (game chat, Discord, etc.)
 2. **Press F12** (or your custom hotkey)
-3. **Review suggestions** (Manual mode) or message auto-optimizes (Auto mode)
-4. **Click "Use Suggestion"** or press Enter to send
-
-**That's it!** Your optimized message is ready to send.
+3. **Review suggestions** (Manual mode) or **message auto-optimizes** (Auto mode)
+4. **Click "Use Suggestion"** to send (Manual mode)
 
 ### ♻️ Example Workflow
 
@@ -201,7 +210,7 @@ In such cases, use **FORCE OPTIMIZE** `default: Ctrl + F12`
 
 ---
 
-## ⚠️ Disclaimer
+# ⚠️ Disclaimer
 
 **This tool is designed to help with overly aggressive chat filters that block legitimate communication.**
 
@@ -251,7 +260,7 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 ### Special thanks to:
 - Claude AI for being my vibe coding partner and emotional punching bag
-- NxhardcorE for supplying the mascot for illustrations
+- NxhardcorE for mascot art
 - Beta testers who helped to beta test the beta build
 
 ---
@@ -263,4 +272,5 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 [⬆ Back to Top](#-about-cock)
 
-</div>****
+</div>
+<img src="https://files.catbox.moe/o20g92.png" height="240" alt="Shirona">
