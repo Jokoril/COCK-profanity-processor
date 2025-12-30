@@ -272,5 +272,6 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 [⬆ Back to Top](#-about-cock)
 
-</div>
 <img src="https://files.catbox.moe/o20g92.png" height="240" alt="Shirona">
+
+</div>
