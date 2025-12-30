@@ -1,4 +1,3 @@
-<br/>
 <div align="center">
   <a href="https://github.com/Jokoril/COCK-profanity-processor">
     <img src="https://files.catbox.moe/7kgdti.png" alt="Logo" width="551" height="149">
@@ -13,7 +12,7 @@
 ![Platform](https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwyNjVIMjMyVjQ0NGwyNDgsMzZWMjY1WiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsMjY1SDMyVjQxNWwxODQsMjYuN1YyNjVaIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwzMiwyMzIsNjcuNFYyNDlINDgwVjMyWiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsNjkuNywzMiw5NlYyNDlIMjE2VjY5LjdaIi8+PC9zdmc+&logoColor=white)
 [![Python](https://img.shields.io/badge/python%203.13-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/downloads/release/python-3130/)
 [![Claude](https://img.shields.io/badge/Claude-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://claude.ai/)
-[![Ko-Fi](https://img.shields.io/badge/Buy_me_a_coffee-FFB24D?logo=ko-fi&style=for-the-badge)](Link_to_ko-fi)
+[![Ko-Fi](https://img.shields.io/badge/Buy_me_a_coffee-FFB24D?logo=ko-fi&style=for-the-badge)](https://ko-fi.com/jokoril)
 [![License](https://img.shields.io/badge/license-GPLv3-purple.svg?style=for-the-badge)](https://github.com/Jokoril/COCK-profanity-processor/blob/main/LICENSE)
 
 
@@ -26,7 +25,7 @@
 Ever tried to say **"Assassin"** in game chat and got censored? What about **"Basement"**? Or **"Analyze"**?
 Or other regular phrases that get rejected because the game you're playing has a profanity filter that's just [too f🤬king sensitive?](https://en.wikipedia.org/wiki/Scunthorpe_problem)
 
-Suffer no more, with the power of 🐔!
+Never let your messages get cockblocked again!
 
 COCK is a lightweight desktop tool that intercepts your messages before you send them, detects words that might be filtered, and applies creative text transformations so that your message "complies" with the in game censorship system.
 
@@ -49,6 +48,17 @@ Optimization:     "🄰ss, "4nal, "s3men"
 
 Game Output:      "🄰ss🄰ssin, 4nalyze, Bas3ment"
 ```
+</div>
+   <div align="center">
+   <details>
+   <summary><h1>🖼️ Screenshots</h1></summary>
+   <img src="https://files.catbox.moe/l9vqjo.png" height="420" alt="2">
+   <img src="https://files.catbox.moe/93ahjn.png" height="420" alt="5">
+   <img src="https://files.catbox.moe/iifccu.png" height="420" alt="4">
+   <img src="https://files.catbox.moe/7j086s.png" height="420" alt="3">
+   <img src="https://files.catbox.moe/q0uvb1.png" height="420" alt="1">
+</details>
+</div>
 
 ---
 
@@ -163,10 +173,8 @@ pyinstaller build.spec
 
 1. **Type your message** in any application (game chat, Discord, etc.)
 2. **Press F12** (or your custom hotkey)
-3. **Review suggestions** (Manual mode) or message auto-optimizes (Auto mode)
-4. **Click "Use Suggestion"** or press Enter to send
-
-**That's it!** Your optimized message is ready to send.
+3. **Review suggestions** (Manual mode) or **message auto-optimizes** (Auto mode)
+4. **Click "Use Suggestion"** to send (Manual mode)
 
 ### ♻️ Example Workflow
 
@@ -201,7 +209,7 @@ In such cases, use **FORCE OPTIMIZE** `default: Ctrl + F12`
 
 ---
 
-## ⚠️ Disclaimer
+# ⚠️ Disclaimer
 
 **This tool is designed to help with overly aggressive chat filters that block legitimate communication.**
 
@@ -251,7 +259,7 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 ### Special thanks to:
 - Claude AI for being my vibe coding partner and emotional punching bag
-- NxhardcorE for supplying the mascot for illustrations
+- NxhardcorE for mascot art
 - Beta testers who helped to beta test the beta build
 
 ---
@@ -263,4 +271,6 @@ If you have filter lists for certain games, [Open a feature request](https://git
 
 [⬆ Back to Top](#-about-cock)
 
-</div>****
+<img src="https://files.catbox.moe/o20g92.png" height="240" alt="Shirona">
+
+</div>
