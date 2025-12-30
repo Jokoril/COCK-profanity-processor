@@ -44,7 +44,7 @@ Type your message and **press the HOTKEY** to send it.
 
 ---
 
-## Step 4: COCK Lives in Your System Tray
+## COCK Lives in Your System Tray
 
 The **Chat Censor Tool** runs in the background. Access it from your system tray (bottom-right corner of Windows taskbar).
 <div align="center">
