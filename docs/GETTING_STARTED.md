@@ -46,7 +46,7 @@ Type your message and **press the HOTKEY** to send it.
 
 ## COCK Lives in Your System Tray
 
-The **Chat Censor Tool** runs in the background. Access it from your system tray (bottom-right corner of Windows taskbar).
+The **Profanity Porcesser Tool** runs in the background. Access it from your system tray (bottom-right corner of Windows taskbar).
 <div align="center">
 <img src="https://i.ibb.co/B2sGb7QD/systemtray.png" height="250" alt="hotkey">
 
