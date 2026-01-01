@@ -9,7 +9,7 @@
 
 <br/>
 
-![Platform](https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwyNjVIMjMyVjQ0NGwyNDgsMzZWMjY1WiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsMjY1SDMyVjQxNWwxODQsMjYuN1YyNjVaIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwzMiwyMzIsNjcuNFYyNDlINDgwVjMyWiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsNjkuNywzMiw5NlYyNDlIMjE2VjY5LjdaIi8+PC9zdmc+&logoColor=white)
+[![Platform](https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwyNjVIMjMyVjQ0NGwyNDgsMzZWMjY1WiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsMjY1SDMyVjQxNWwxODQsMjYuN1YyNjVaIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTQ4MCwzMiwyMzIsNjcuNFYyNDlINDgwVjMyWiIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTYsNjkuNywzMiw5NlYyNDlIMjE2VjY5LjdaIi8+PC9zdmc+&logoColor=white)](https://github.com/Jokoril/COCK-profanity-processor/releases)
 [![Python](https://img.shields.io/badge/python%203.13-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/downloads/release/python-3130/)
 [![Claude](https://img.shields.io/badge/Claude-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://claude.ai/)
 [![Ko-Fi](https://img.shields.io/badge/Buy_me_a_coffee-FFB24D?logo=ko-fi&style=for-the-badge)](https://ko-fi.com/jokoril)
