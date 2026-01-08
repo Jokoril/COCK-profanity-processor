@@ -355,14 +355,32 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             
             # Store filter loader for export functionality
             self.filter_loader = loader
-            
+
+            # Setup file watcher for auto-reload (v1.0.3)
+            self.file_watcher = None
+            if filter_path and os.path.exists(filter_path):
+                try:
+                    from COCK.file_watcher import FileWatcher
+                    self.file_watcher = FileWatcher()
+                    self.file_watcher.watch_file(
+                        filter_path,
+                        lambda: self.reload_filter(verbose=False)
+                    )
+                    self.file_watcher.start()
+                    self.logger.info(f"File watcher enabled for: {filter_path}")
+                except ImportError:
+                    self.logger.warning("watchdog not installed - file watcher disabled")
+                    self.logger.warning("Install with: pip install watchdog")
+                except Exception as e:
+                    self.logger.error(f"Failed to start file watcher: {e}")
+
             if self.automaton is None:
                 self.logger.error("Failed to load filter file")
                 return False
-            
+
             # Store stats for settings dialog
             self.filter_stats = stats
-            
+
             self.log(f"Loaded {stats['final_count']} filter words in {stats['load_time_ms']:.1f}ms")
             
             # Phase 2: Detection engine
@@ -1401,8 +1419,59 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
 
         # Sync notification settings to tray menu
         self.sync_notification_settings()
-        
+
         self.log("✓ All settings applied successfully (no restart needed)")
+
+    def reload_filter(self, verbose: bool = False):
+        """
+        Reload filter list from file and update detector
+
+        Enables live updates when filter entries are added/removed via UI
+        without requiring application restart (v1.0.2 feature).
+
+        v1.0.3: Added error notifications for reload failures.
+
+        Args:
+            verbose: Print loading statistics
+
+        Returns:
+            bool: True if reload successful, False otherwise
+
+        Example:
+            # After UI adds a filter entry
+            cock.reload_filter()
+        """
+        if not hasattr(self, 'filter_loader') or not self.filter_loader:
+            self.logger.error("Filter loader not initialized")
+            return False
+
+        self.logger.info("Reloading filter list...")
+
+        # Reload filter list and rebuild automaton
+        new_automaton, stats = self.filter_loader.reload(verbose=verbose)
+
+        if new_automaton is None:
+            error = stats.get('error', 'Unknown error')
+            self.logger.error(f"Filter reload failed: {error}")
+
+            # Show user notification (v1.0.3)
+            if PYQT5_AVAILABLE and hasattr(self, 'show_notification'):
+                self.show_notification(
+                    "Filter Reload Failed",
+                    f"Error: {error}\nUsing previous filter list.",
+                    notification_type='error'
+                )
+            return False
+
+        # Update automaton in detector
+        self.automaton = new_automaton
+        self.detector.update_automaton(new_automaton)
+
+        # Update router and optimizer detector references (they already point to self.detector)
+        # No action needed - they use the same detector instance
+
+        self.logger.info(f"Filter reloaded successfully - {stats.get('final_count', 0)} entries active")
+        return True
 
     def sync_notification_settings(self):
         """Sync notification settings between config and tray menu"""
@@ -2067,14 +2136,33 @@ Optimization:
                         time.sleep(0.1)
                 except KeyboardInterrupt:
                     print("\nShutting down...")
-                
+                    self.cleanup()
+
                 return 0
-            
+
         except Exception as e:
             self.logger.error(f"Application failed: {e}")
             if self.debug:
                 traceback.print_exc()
+            self.cleanup()
             return 1
+
+    def cleanup(self):
+        """Cleanup resources before shutdown"""
+        try:
+            # Stop file watcher
+            if hasattr(self, 'file_watcher') and self.file_watcher:
+                self.logger.info("Stopping file watcher...")
+                self.file_watcher.stop()
+
+            # Stop hotkey listener
+            if hasattr(self, 'hotkey') and self.hotkey:
+                self.logger.info("Stopping hotkey listener...")
+                self.hotkey.stop()
+
+            self.logger.info("Cleanup complete")
+        except Exception as e:
+            self.logger.error(f"Cleanup error: {e}")
 
 
 def main():

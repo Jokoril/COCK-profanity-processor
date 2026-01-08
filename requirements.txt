@@ -8,6 +8,7 @@ PyQt5>=5.15.0
 keyboard>=0.13.5
 pyperclip>=1.8.2
 psutil>=5.9.0
+watchdog>=3.0.0  # v1.0.3: File watcher for auto-reload
 
 # Update System (optional - gracefully disabled if missing)
 requests>=2.31.0

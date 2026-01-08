@@ -35,6 +35,7 @@ class FilterLoader:
         self.automaton = None
         self.stats = {}
         self.filter_words = set()
+        self.filepath = None  # Store filepath for reload
     
     def load(self, filepath: str, verbose: bool = True) -> Tuple[Optional['ahocorasick.Automaton'], Dict]:
         """
@@ -62,12 +63,15 @@ class FilterLoader:
         
         if ahocorasick is None:
             return (None, {"error": "pyahocorasick not installed"})
-        
+
+        # Store filepath for reload
+        self.filepath = filepath
+
         # Clean up old automaton if exists (prevents memory leak)
         if self.automaton is not None:
             del self.automaton
             self.automaton = None
-            
+
             # Optional: Force garbage collection
             import gc
             gc.collect()
@@ -150,7 +154,79 @@ class FilterLoader:
             error_msg = f"Error loading filter file: {e}"
             log.error(error_msg)
             return (None, {"error": error_msg})
-    
+
+    def reload(self, verbose: bool = True) -> Tuple[Optional['ahocorasick.Automaton'], Dict]:
+        """
+        Reload filter list from file and rebuild automaton
+
+        This enables live updates when filter entries are added/removed via UI
+        without requiring application restart (v1.0.2 feature).
+
+        v1.0.3: Added error recovery - keeps old automaton if reload fails.
+        v1.0.3: Added performance monitoring.
+
+        Args:
+            verbose: Print loading statistics
+
+        Returns:
+            tuple: (automaton, stats_dict) - Same as load()
+                If reload fails, returns old automaton with error in stats
+
+        Example:
+            # After UI adds a filter entry
+            new_automaton, stats = loader.reload()
+            if new_automaton is not None:
+                detector.update_automaton(new_automaton)
+        """
+        import time
+
+        if not self.filepath:
+            error_msg = "No filepath set - call load() first before reload()"
+            log.error(error_msg)
+            return (None, {"error": error_msg})
+
+        log.info(f"Reloading filter list from: {self.filepath}")
+
+        # Performance monitoring (v1.0.3)
+        start_time = time.perf_counter()
+
+        # Store old automaton as backup (v1.0.3)
+        old_automaton = self.automaton
+        old_stats = self.stats.copy() if self.stats else {}
+        old_filter_words = self.filter_words.copy() if self.filter_words else set()
+
+        try:
+            # Try to reload
+            new_automaton, new_stats = self.load(self.filepath, verbose)
+
+            if new_automaton is None:
+                # Reload failed - restore old automaton
+                log.error("Reload failed - keeping existing filter list")
+                self.automaton = old_automaton
+                self.stats = old_stats
+                self.filter_words = old_filter_words
+                return (old_automaton, {"error": "Reload failed, using cached version", **old_stats})
+
+            # Performance logging (v1.0.3)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            log.info(f"Filter reload completed in {elapsed_ms:.1f}ms")
+
+            # Warn if slow
+            if elapsed_ms > 500:
+                log.warning(f"Slow filter reload: {elapsed_ms:.1f}ms exceeds 500ms target")
+
+            # Success
+            return (new_automaton, new_stats)
+
+        except Exception as e:
+            # Critical error - restore backup
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            log.error(f"Critical reload error after {elapsed_ms:.1f}ms: {e}")
+            self.automaton = old_automaton
+            self.stats = old_stats
+            self.filter_words = old_filter_words
+            return (old_automaton, {"error": f"Reload exception: {e}", **old_stats})
+
     def search(self, text: str) -> list:
         """
         Search text for filter words using Aho-Corasick

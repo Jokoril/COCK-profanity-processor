@@ -15,9 +15,14 @@ Algorithm Version: 4.0 (Production)
 """
 
 import re
+import time
 from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 from enum import Enum
+from logger import get_logger
+
+# Module logger
+log = get_logger(__name__)
 
 # Import fancy text unicode ranges for dynamic pattern building
 try:
@@ -102,7 +107,7 @@ class FastCensorDetector:
     def __init__(self, automaton, whitelist: Set[str], config: Dict):
         """
         Initialize fast detector
-        
+
         Args:
             automaton: Aho-Corasick automaton from filter_loader
             whitelist: Set of whitelisted words (safe when embedded)
@@ -160,8 +165,8 @@ class FastCensorDetector:
         # Compile and cache
         self._cached_word_pattern = re.compile(pattern)
         self._cached_pattern_key = current_cache_key
-        
-        print(f"[DETECTOR] Word pattern rebuilt: style='{style}', special='{special_char}'")
+
+        log.debug(f"Word pattern rebuilt: style='{style}', special='{special_char}'")
     
     def extract_words(self, text: str) -> List[str]:
         """
@@ -802,7 +807,32 @@ class FastCensorDetector:
             )
         
         return None
-    
+
+    def update_automaton(self, new_automaton):
+        """
+        Update the Aho-Corasick automaton for live filter reload
+
+        Enables filter list updates without restarting the application (v1.0.2 feature).
+        v1.0.3: Added performance monitoring.
+
+        Args:
+            new_automaton: New Aho-Corasick automaton from FilterLoader.reload()
+
+        Example:
+            # After UI adds a filter entry
+            loader.reload()
+            detector.update_automaton(loader.automaton)
+        """
+        # Performance monitoring (v1.0.3)
+        start_time = time.perf_counter()
+
+        self.automaton = new_automaton
+
+        # Log performance (v1.0.3)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        log.debug(f"Automaton updated in {elapsed_ms:.3f}ms")
+        log.info("Filter automaton updated - new entries now active")
+
     def get_stats(self) -> Dict:
         """
         Get detector statistics
