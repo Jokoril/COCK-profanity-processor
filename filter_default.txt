@@ -1,4 +1,4 @@
-# Chat Censor Tool Filter List
+# COCK Filter List
 # Total entries: 3550
 # Supported (Latin-only): 3550
 

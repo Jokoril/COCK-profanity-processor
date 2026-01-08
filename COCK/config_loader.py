@@ -18,6 +18,10 @@ from typing import Dict, Any, Optional
 import path_manager
 import tempfile
 import shutil
+from logger import get_logger
+
+# Module logger
+log = get_logger(__name__)
 
 # Filepath sanitization
 def sanitize_path(file_path: str, base_dir: Optional[str] = None) -> str:
@@ -130,7 +134,7 @@ class ConfigLoader:
         """
         if not os.path.exists(self.config_path):
             # Config doesn't exist - create default
-            print(f"Config file not found. Creating default: {self.config_path}")
+            log.info(f"Config file not found. Creating default: {self.config_path}")
             self.config = DEFAULT_CONFIG.copy()
             
             # Copy bundled filter file to exe directory on first run
@@ -147,23 +151,26 @@ class ConfigLoader:
             # Merge with defaults to ensure all keys exist
             self.config = self._merge_with_defaults(loaded_config)
 
-            # Sanitize file paths in config
+            # Security: Validate config values (v1.0.1 fix)
+            self._validate_config_values()
+
+            # Security: Sanitize file paths in config (v1.0.1 fix)
             self._sanitize_config_paths()
-            
+
             return self.config
             
         except json.JSONDecodeError as e:
             # Config file is corrupted
-            print(f"Error reading config file: {e}")
+            log.error(f"Error reading config file: {e}")
             
             # Secure backup using temp file
             try:
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.backup') as tmp:
                     backup_path = tmp.name
                 shutil.copy2(self.config_path, backup_path)
-                print(f"Corrupted config backed up to: {backup_path}")
+                log.info(f"Corrupted config backed up to: {backup_path}")
             except Exception as backup_error:
-                print(f"Warning: Could not backup corrupted config: {backup_error}")
+                log.warning(f"Could not backup corrupted config: {backup_error}")
             
             # Create new default config
             self.config = DEFAULT_CONFIG.copy()
@@ -171,7 +178,7 @@ class ConfigLoader:
             return self.config
         
         except Exception as e:
-            print(f"Unexpected error loading config: {e}")
+            log.error(f"Unexpected error loading config: {e}")
             self.config = DEFAULT_CONFIG.copy()
             return self.config
         
@@ -190,7 +197,7 @@ class ConfigLoader:
         
         # If filter file doesn't exist, try to copy from bundle
         if not os.path.exists(filter_file):
-            print(f"Filter file not found at: {filter_file}")
+            log.info(f"Filter file not found at: {filter_file}")
             
             # Check if running as .exe with bundled resources
             if getattr(sys, 'frozen', False):
@@ -198,18 +205,18 @@ class ConfigLoader:
                 
                 if os.path.exists(bundled_filter):
                     try:
-                        print(f"Copying bundled filter file...")
-                        print(f"  From: {bundled_filter}")
-                        print(f"  To: {filter_file}")
+                        log.info(f"Copying bundled filter file...")
+                        log.info(f"  From: {bundled_filter}")
+                        log.info(f"  To: {filter_file}")
                         shutil.copy2(bundled_filter, filter_file)
-                        print(f"Filter file created successfully")
+                        log.info(f"Filter file created successfully")
                     except Exception as e:
-                        print(f"Warning: Could not copy filter file: {e}")
+                        log.warning(f"Could not copy filter file: {e}")
                 else:
-                    print(f"Warning: Bundled filter not found at: {bundled_filter}")
+                    log.warning(f"Bundled filter not found at: {bundled_filter}")
             else:
                 # Running as script - create empty filter file with instructions
-                print(f"Creating empty filter file at: {filter_file}")
+                log.info(f"Creating empty filter file at: {filter_file}")
                 try:
                     with open(filter_file, 'w', encoding='utf-8') as f:
                         f.write("# COCK Profanity Processor - Filter Word List\n")
@@ -217,9 +224,9 @@ class ConfigLoader:
                         f.write("# Example:\n")
                         f.write("# badword\n")
                         f.write("# anotherbadword\n")
-                    print("Empty filter file created - please add your filtered words")
+                    log.info("Empty filter file created - please add your filtered words")
                 except Exception as e:
-                    print(f"Error creating filter file: {e}")
+                    log.error(f"Error creating filter file: {e}")
     
     def save(self, config: Optional[Dict[str, Any]] = None) -> bool:
         """
@@ -235,7 +242,7 @@ class ConfigLoader:
             self.config = config
         
         if self.config is None:
-            print("No configuration to save")
+            log.warning("No configuration to save")
             return False
         
         try:
@@ -247,9 +254,9 @@ class ConfigLoader:
                 json.dump(self.config, f, indent=4, ensure_ascii=False)
             
             return True
-            
+
         except Exception as e:
-            print(f"Error saving config: {e}")
+            log.error(f"Error saving config: {e}")
             return False
     
     def get(self, key: str, default: Any = None) -> Any:
@@ -335,28 +342,102 @@ class ConfigLoader:
         return (len(errors) == 0, errors)
     
     def _sanitize_config_paths(self) -> None:
-        """Sanitize all file paths in configuration"""
+        """
+        Sanitize all file paths in configuration to prevent path traversal
+
+        Security fix for v1.0.1: Validates user-provided file paths to ensure
+        they don't escape the application directory (e.g., ../../../etc/passwd)
+        """
         if not self.config:
             return
-        
+
+        # Validate filter_file (required, must be .txt)
         if self.config.get('filter_file'):
             try:
-                self.config['filter_file'] = sanitize_path(self.config['filter_file'])
+                validated_path = path_manager.validate_user_file_path(
+                    self.config['filter_file'],
+                    allowed_extensions=['.txt']
+                )
+                self.config['filter_file'] = validated_path
             except ValueError as e:
-                print(f"Warning: Invalid filter_file path: {e}")
-                self.config['filter_file'] = ""
-        
+                log.warning(f"SECURITY WARNING: Invalid filter_file path blocked: {e}")
+                # Fall back to default
+                self.config['filter_file'] = path_manager.get_data_file('filter_default.txt')
+
+        # Validate paths section
         if 'paths' in self.config:
             for key in ['whitelist_file', 'shorthand_file']:
                 if key in self.config['paths'] and self.config['paths'][key]:
                     try:
-                        path = self.config['paths'][key]
-                        if not os.path.isabs(path):
-                            path = path_manager.get_data_file(path)
-                        self.config['paths'][key] = sanitize_path(path)
+                        validated_path = path_manager.validate_user_file_path(
+                            self.config['paths'][key],
+                            allowed_extensions=['.txt']
+                        )
+                        self.config['paths'][key] = validated_path
                     except ValueError as e:
-                        print(f"Warning: Invalid {key} path: {e}")
-                        self.config['paths'][key] = ""
+                        log.warning(f"SECURITY WARNING: Invalid {key} path blocked: {e}")
+                        # Fall back to default filename in app directory
+                        default_filename = key  # e.g., 'whitelist_file' -> 'whitelist_file'
+                        self.config['paths'][key] = path_manager.get_data_file(f"{key.replace('_file', '.txt')}")
+
+    def _validate_config_values(self) -> None:
+        """
+        Validate configuration values to ensure they're within safe ranges
+
+        Security fix for v1.0.1: Prevents malformed configs from causing crashes
+        or unexpected behavior (e.g., negative limits, huge numbers)
+        """
+        if not self.config:
+            return
+
+        # Validate sliding_window_size (2-5 range)
+        if 'sliding_window_size' in self.config:
+            size = self.config['sliding_window_size']
+            if not isinstance(size, int) or size < 2 or size > 5:
+                log.warning(f"Invalid sliding_window_size={size}, clamping to 3")
+                self.config['sliding_window_size'] = 3
+
+        # Validate keyboard_delay_ms (0-5000 range)
+        if 'keyboard_delay_ms' in self.config:
+            delay = self.config['keyboard_delay_ms']
+            if not isinstance(delay, int) or delay < 0 or delay > 5000:
+                log.warning(f"Invalid keyboard_delay_ms={delay}, clamping to 100")
+                self.config['keyboard_delay_ms'] = 100
+
+        # Validate auto_send delay
+        if 'auto_send' in self.config and 'delay_ms' in self.config['auto_send']:
+            delay = self.config['auto_send']['delay_ms']
+            if not isinstance(delay, int) or delay < 0 or delay > 5000:
+                log.warning(f"Invalid auto_send.delay_ms={delay}, clamping to 100")
+                self.config['auto_send']['delay_ms'] = 100
+
+        # Validate UI scale values (0.5-2.0 range)
+        if 'ui' in self.config:
+            for scale_key in ['notification_scale', 'prompt_scale', 'settings_scale']:
+                if scale_key in self.config['ui']:
+                    scale = self.config['ui'][scale_key]
+                    if not isinstance(scale, (int, float)) or scale < 0.5 or scale > 2.0:
+                        log.warning(f"Invalid ui.{scale_key}={scale}, clamping to 1.0")
+                        self.config['ui'][scale_key] = 1.0
+
+        # Validate UI offsets (-1000 to 1000 pixels)
+        if 'ui' in self.config:
+            for offset_key in ['notification_offset_x', 'notification_offset_y', 'prompt_offset_x', 'prompt_offset_y']:
+                if offset_key in self.config['ui']:
+                    offset = self.config['ui'][offset_key]
+                    if not isinstance(offset, int) or offset < -1000 or offset > 1000:
+                        log.warning(f"Invalid ui.{offset_key}={offset}, clamping to 0")
+                        self.config['ui'][offset_key] = 0
+
+        # Validate performance limits (10-10000ms range)
+        if 'performance' in self.config:
+            for key in ['max_filter_load_time_ms', 'max_detection_time_ms']:
+                if key in self.config['performance']:
+                    limit = self.config['performance'][key]
+                    if not isinstance(limit, int) or limit < 10 or limit > 10000:
+                        default = 500 if 'load' in key else 50
+                        log.warning(f"Invalid performance.{key}={limit}, resetting to {default}")
+                        self.config['performance'][key] = default
     
     def _merge_with_defaults(self, loaded_config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -415,7 +496,7 @@ def create_default_files():
     config_loader = ConfigLoader()
     if not os.path.exists(config_loader.config_path):
         config_loader.load()  # This will create it
-        print(f"Created: {config_loader.config_path}")
+        log.info(f"Created: {config_loader.config_path}")
     
     # Create whitelist.txt
     whitelist_path = path_manager.get_data_file('whitelist.txt')
@@ -424,8 +505,8 @@ def create_default_files():
             f.write("# Whitelist - Safe words when embedded\n")
             f.write("# Add one word per line (case-insensitive)\n")
             f.write("# Example: ass (makes 'assassin' safe)\n")
-        print(f"Created: {whitelist_path}")
+        log.info(f"Created: {whitelist_path}")
     
 # Module information
-__version__ = '1.0.0'
+__version__ = '1.1.0'  # Updated to use centralized logging
 __author__ = 'Jokoril'

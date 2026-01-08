@@ -18,6 +18,63 @@ Example (force mode):
     "test message" → "t❤e❤s❤t❤ ❤m❤e❤s❤s❤a❤g❤e"
 """
 
+from logger import get_logger
+
+# Module logger
+log = get_logger(__name__)
+
+# Security: Forbidden characters that could be dangerous or cause issues
+# v1.0.1 security fix - prevent command injection and control characters
+FORBIDDEN_CHARS = {
+    # Shell/command injection risks
+    '`', '$', ';', '&', '|', '!', '^', '<', '>', '"', "'", '\\',
+    # Control characters and whitespace
+    '\n', '\r', '\t', '\0', '\x00', '\x01', '\x02', '\x03', '\x04',
+    '\x05', '\x06', '\x07', '\x08', '\x09', '\x0A', '\x0B', '\x0C',
+    '\x0D', '\x0E', '\x0F', '\x10', '\x11', '\x12', '\x13', '\x14',
+    '\x15', '\x16', '\x17', '\x18', '\x19', '\x1A', '\x1B', '\x1C',
+    '\x1D', '\x1E', '\x1F',
+    # Problematic spacing
+    ' ', '\u00A0', '\u2000', '\u2001', '\u2002', '\u2003', '\u2004',
+    # Path separators (could cause file system issues)
+    '/', '\\'
+}
+
+
+def is_safe_special_char(char: str) -> bool:
+    """
+    Validate that a special character is safe to use
+
+    Security fix for v1.0.1: Prevents dangerous characters that could
+    cause command injection, control flow issues, or unexpected behavior.
+
+    Args:
+        char: Character to validate
+
+    Returns:
+        bool: True if safe, False if forbidden
+
+    Example:
+        >>> is_safe_special_char('❤')
+        True
+        >>> is_safe_special_char('`')
+        False
+        >>> is_safe_special_char(';')
+        False
+    """
+    if not char or len(char) != 1:
+        return False
+
+    # Check forbidden list
+    if char in FORBIDDEN_CHARS:
+        return False
+
+    # Alphanumeric characters not allowed (would interfere with text)
+    if char.isalnum():
+        return False
+
+    return True
+
 
 class SpecialCharInterspacing:
     """
@@ -34,20 +91,23 @@ class SpecialCharInterspacing:
     def __init__(self, config: dict):
         """
         Initialize special character interspacing
-        
+
         Args:
             config: Configuration dictionary with 'special_char_interspacing' section
         """
         self.config = config
         interspacing_config = config.get('special_char_interspacing', {})
-        
+
         # Get user's custom character or use default
-        self.char = interspacing_config.get('character', self.DEFAULT_CHAR)
-        
-        # Validate character (must be exactly 1 character)
-        if not self.char or len(self.char) != 1:
-            print(f"[INTERSPACING] Warning: Invalid character '{self.char}', using default ❤")
+        user_char = interspacing_config.get('character', self.DEFAULT_CHAR)
+
+        # Security validation (v1.0.1 fix)
+        if not is_safe_special_char(user_char):
+            if user_char != self.DEFAULT_CHAR:
+                log.warning(f"SECURITY WARNING: Forbidden character '{repr(user_char)}' rejected, using default ❤")
             self.char = self.DEFAULT_CHAR
+        else:
+            self.char = user_char
     
     def apply_to_word(self, word: str) -> str:
         """
@@ -95,26 +155,26 @@ class SpecialCharInterspacing:
             → "test 4❤20"
         """
         if not flagged_words:
-            print(f"[INTERSPACING] No flagged words provided")
+            log.debug("No flagged words provided")
             return text
-        
+
         result = text
-        
+
         # Process each flagged word
         # Sort by length (longest first) to avoid partial replacements
         sorted_words = sorted(flagged_words, key=len, reverse=True)
-        
-        print(f"[INTERSPACING] Processing {len(sorted_words)} flagged words with char '{self.char}'")
+
+        log.debug(f"Processing {len(sorted_words)} flagged words with char '{self.char}'")
         
         for word in sorted_words:
             if len(word) < 2:
-                print(f"[INTERSPACING] Skipping '{word}' (too short)")
+                log.debug(f"Skipping '{word}' (too short)")
                 continue
-            
+
             # Create interspaced version
             interspaced = self.apply_to_word(word)
-            
-            print(f"[INTERSPACING] Looking for '{word}' to replace with '{interspaced}'")
+
+            log.debug(f"Looking for '{word}' to replace with '{interspaced}'")
             
             # Replace in text (case-insensitive)
             import re
@@ -123,12 +183,12 @@ class SpecialCharInterspacing:
             # Check if pattern found
             matches = pattern.findall(result)
             if matches:
-                print(f"[INTERSPACING] Found {len(matches)} occurrence(s) of '{word}'")
+                log.debug(f"Found {len(matches)} occurrence(s) of '{word}'")
                 result = pattern.sub(interspaced, result, count=1)
-                print(f"[INTERSPACING] Replaced '{word}' with '{interspaced}'")
+                log.debug(f"Replaced '{word}' with '{interspaced}'")
             else:
-                print(f"[INTERSPACING] WARNING: '{word}' not found in text!")
-                print(f"[INTERSPACING] Text: {result[:50]}...")
+                log.warning(f"'{word}' not found in text!")
+                log.debug(f"Text: {result[:50]}...")
         
         return result
     
@@ -151,7 +211,7 @@ class SpecialCharInterspacing:
             Result: "Du❤ring" (insert after position 1)
         """
         if not detection_results:
-            print(f"[INTERSPACING] No detection results provided")
+            log.debug("No detection results provided")
             return text
         
         # Sort detection results by position (process from end to start to avoid offset issues)
@@ -183,12 +243,12 @@ class SpecialCharInterspacing:
                         # Calculate absolute position in text where we need to insert
                         # Insert after the first character of the filtered word
                         insert_pos = word_start + filtered_pos_in_word + 1
-                        
+
                         insertions.append((insert_pos, self.char))
-                        print(f"[INTERSPACING] Embedding: '{filtered_word}' in '{full_word}' at word pos {filtered_pos_in_word}")
-                        print(f"[INTERSPACING]   Inserting '{self.char}' at text position {insert_pos}")
+                        log.debug(f"Embedding: '{filtered_word}' in '{full_word}' at word pos {filtered_pos_in_word}")
+                        log.debug(f"  Inserting '{self.char}' at text position {insert_pos}")
                 else:
-                    print(f"[INTERSPACING] WARNING: Full word '{full_word}' not found in text")
+                    log.warning(f"Full word '{full_word}' not found in text")
             
             elif result.detection_type.name == 'STANDALONE':
                 # Standalone word: use the standard approach
@@ -201,9 +261,9 @@ class SpecialCharInterspacing:
                     match = matches[0]
                     insert_pos = match.start() + 1  # After first character
                     insertions.append((insert_pos, self.char))
-                    print(f"[INTERSPACING] Standalone: '{filtered_word}' at position {insert_pos}")
+                    log.debug(f"Standalone: '{filtered_word}' at position {insert_pos}")
                 else:
-                    print(f"[INTERSPACING] WARNING: Standalone word '{filtered_word}' not found")
+                    log.warning(f"Standalone word '{filtered_word}' not found")
             
             elif result.detection_type.name == 'STRIPPED_WINDOW' and result.window_range:
                 # Sliding window: find where filtered word appears in the window
@@ -230,14 +290,14 @@ class SpecialCharInterspacing:
                                 # Found it - insert after this character
                                 insert_pos = start + i + 1
                                 insertions.append((insert_pos, self.char))
-                                print(f"[INTERSPACING] Sliding window: '{filtered_word}' starts at position {insert_pos}")
+                                log.debug(f"Sliding window: '{filtered_word}' starts at position {insert_pos}")
                                 break
                             char_count += 1
                 else:
                     # Fallback: insert at window start
                     insert_pos = start + 1
                     insertions.append((insert_pos, self.char))
-                    print(f"[INTERSPACING] Sliding window (fallback): inserting at position {insert_pos}")
+                    log.debug(f"Sliding window (fallback): inserting at position {insert_pos}")
         
         # Sort insertions by position (descending) to avoid offset issues
         insertions.sort(key=lambda x: x[0], reverse=True)
@@ -247,7 +307,7 @@ class SpecialCharInterspacing:
         for pos, char in insertions:
             if 0 <= pos <= len(result_text):
                 result_text = result_text[:pos] + char + result_text[pos:]
-                print(f"[INTERSPACING] Inserted '{char}' at position {pos}")
+                log.debug(f"Inserted '{char}' at position {pos}")
         
         return result_text
     
@@ -287,16 +347,18 @@ class SpecialCharInterspacing:
     def set_char(self, char: str) -> bool:
         """
         Set special character
-        
+
         Args:
-            char: New character (must be exactly 1 character)
-            
+            char: New character (must be exactly 1 character and safe)
+
         Returns:
-            bool: True if set successfully, False if invalid
+            bool: True if set successfully, False if invalid or forbidden
         """
-        if not char or len(char) != 1:
+        # Security validation (v1.0.1 fix)
+        if not is_safe_special_char(char):
+            log.warning(f"SECURITY WARNING: Cannot set forbidden character '{repr(char)}'")
             return False
-        
+
         self.char = char
         return True
     
@@ -324,3 +386,8 @@ class SpecialCharInterspacing:
             'per_word': f"+1 char, +{char_bytes} bytes",
             'per_char': f"+1 char, +{char_bytes} bytes per insertion"
         }
+
+
+# Module information
+__version__ = '1.1.0'  # Updated to use centralized logging
+__author__ = 'Jokoril'

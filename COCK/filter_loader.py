@@ -14,10 +14,15 @@ Features:
 
 import time
 from typing import Tuple, Dict, Set, Optional
+from logger import get_logger
+
+# Module logger
+log = get_logger(__name__)
+
 try:
     import ahocorasick
 except ImportError:
-    print("WARNING: pyahocorasick not installed. Install with: pip install pyahocorasick")
+    log.warning("pyahocorasick not installed. Install with: pip install pyahocorasick")
     ahocorasick = None
 
 
@@ -132,18 +137,18 @@ class FilterLoader:
             
             # Validate performance
             if stats['load_time_ms'] > 500:
-                print(f"WARNING: Load time ({stats['load_time_ms']:.0f}ms) exceeds target (500ms)")
-            
+                log.warning(f"Load time ({stats['load_time_ms']:.0f}ms) exceeds target (500ms)")
+
             return (self.automaton, stats)
-            
+
         except FileNotFoundError:
             error_msg = f"Filter file not found: {filepath}"
-            print(f"ERROR: {error_msg}")
+            log.error(error_msg)
             return (None, {"error": error_msg})
-        
+
         except Exception as e:
             error_msg = f"Error loading filter file: {e}"
-            print(f"ERROR: {error_msg}")
+            log.error(error_msg)
             return (None, {"error": error_msg})
     
     def search(self, text: str) -> list:
@@ -262,32 +267,32 @@ class FilterLoader:
     
     def _print_stats(self, stats: Dict) -> None:
         """
-        Print loading statistics
-        
+        Print loading statistics using logger
+
         Args:
             stats: Statistics dictionary
         """
-        print("\n" + "="*60)
-        print("FILTER LOADING STATISTICS")
-        print("="*60)
-        print(f"File: {stats.get('file_path', 'Unknown')}")
-        print(f"Total lines read: {stats['loaded']}")
-        print(f"Removed (empty/comments): {stats['removed_empty']}")
-        
+        log.info("=" * 60)
+        log.info("FILTER LOADING STATISTICS")
+        log.info("=" * 60)
+        log.info(f"File: {stats.get('file_path', 'Unknown')}")
+        log.info(f"Total lines read: {stats['loaded']}")
+        log.info(f"Removed (empty/comments): {stats['removed_empty']}")
+
         # Show non-Latin removals with examples
         if stats.get('removed_non_latin', 0) > 0:
-            print(f"Removed (non-Latin/mixed): {stats['removed_non_latin']} ⚠")
+            log.warning(f"Removed (non-Latin/mixed): {stats['removed_non_latin']}")
             if stats.get('non_latin_examples') and stats['non_latin_examples']:
-                print(f"  Examples: {', '.join(stats['non_latin_examples'][:5])}")
+                log.info(f"  Examples: {', '.join(stats['non_latin_examples'][:5])}")
                 if len(stats['non_latin_examples']) > 5:
-                    print(f"  ... and {stats['removed_non_latin'] - 5} more")
-        
-        print(f"Removed (duplicates): {stats['removed_duplicates']}")
-        print(f"Final filter count: {stats['final_count']}")
-        print(f"  ℹ️  Pure Latin + diacriticals only (e.g., Coño, café, Scheiße)")
-        print(f"  ℹ️  Rejected: Any CJK, Cyrillic, Arabic, emoji, etc.")
-        print(f"Load time: {stats['load_time_ms']:.1f}ms")
-        print("="*60 + "\n")
+                    log.info(f"  ... and {stats['removed_non_latin'] - 5} more")
+
+        log.info(f"Removed (duplicates): {stats['removed_duplicates']}")
+        log.info(f"Final filter count: {stats['final_count']}")
+        log.info(f"  Pure Latin + diacriticals only (e.g., Coño, café, Scheiße)")
+        log.info(f"  Rejected: Any CJK, Cyrillic, Arabic, emoji, etc.")
+        log.info(f"Load time: {stats['load_time_ms']:.1f}ms")
+        log.info("=" * 60)
 
 
 def load_whitelist(filepath: str) -> Set[str]:
@@ -317,14 +322,14 @@ def load_whitelist(filepath: str) -> Set[str]:
                     continue
                 
                 whitelist.add(word.lower())
-        
-        print(f"Loaded {len(whitelist)} words from whitelist: {filepath}")
-        
+
+        log.info(f"Loaded {len(whitelist)} words from whitelist: {filepath}")
+
     except FileNotFoundError:
-        print(f"Whitelist file not found: {filepath}")
+        log.warning(f"Whitelist file not found: {filepath}")
     except Exception as e:
-        print(f"Error loading whitelist: {e}")
-    
+        log.error(f"Error loading whitelist: {e}")
+
     return whitelist
 
 
@@ -355,14 +360,14 @@ def load_blacklist(filepath: str) -> Set[str]:
                     continue
                 
                 blacklist.add(word.lower())
-        
-        print(f"Loaded {len(blacklist)} words from blacklist: {filepath}")
-        
+
+        log.info(f"Loaded {len(blacklist)} words from blacklist: {filepath}")
+
     except FileNotFoundError:
-        print(f"Blacklist file not found: {filepath}")
+        log.warning(f"Blacklist file not found: {filepath}")
     except Exception as e:
-        print(f"Error loading blacklist: {e}")
-    
+        log.error(f"Error loading blacklist: {e}")
+
     return blacklist
 
 
@@ -386,9 +391,9 @@ def save_whitelist(filepath: str, whitelist: Set[str]) -> bool:
                 f.write(f"{word}\n")
         
         return True
-        
+
     except Exception as e:
-        print(f"Error saving whitelist: {e}")
+        log.error(f"Error saving whitelist: {e}")
         return False
 
 
@@ -412,12 +417,12 @@ def save_blacklist(filepath: str, blacklist: Set[str]) -> bool:
                 f.write(f"{word}\n")
         
         return True
-        
+
     except Exception as e:
-        print(f"Error saving blacklist: {e}")
+        log.error(f"Error saving blacklist: {e}")
         return False
 
 
 # Module information
-__version__ = '1.0.0'
+__version__ = '1.1.0'  # Updated to use centralized logging
 __author__ = 'Jokoril'

@@ -223,14 +223,18 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         """
         if PYQT5_AVAILABLE:
             super().__init__()
-        
+
+        # Initialize logger for this class (v1.1)
+        from COCK.logger import get_logger
+        self.logger = get_logger(__name__)
+
         self.debug = debug
         self.config_path = config_path
         self.app = app  # Store app if provided
         self._last_notification_scale = 1.0
         self._last_prompt_scale = 1.0
         self.pending_paste_part = "" # Track multi-part message remainder text
-        
+
         # Create debug window
         if PYQT5_AVAILABLE:
             self.debug_window = DebugWindow()
@@ -264,16 +268,13 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         self.log("COCK Profanity Processor starting...")
 
     def log(self, message):
-        """Log message to console and debug window"""
-        debug_msg = f"[DEBUG] {message}"
-        
-        # Always print to stdout
-        if self.debug:
-            print(debug_msg)
-        
+        """Log message using centralized logger and debug window"""
+        # Use centralized logger (v1.1)
+        self.logger.debug(message)
+
         # Also send to debug window if it exists
         if hasattr(self, 'debug_window') and self.debug_window:
-            self.debug_window.append_text(debug_msg)
+            self.debug_window.append_text(f"[DEBUG] {message}")
     
     def initialize(self):
         """Initialize all modules"""
@@ -293,15 +294,15 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             
             # Check permissions
             permissions = permission_manager.check_permissions()
-            
+
             # Check clipboard (tuple with (status, message))
             if not permissions.get('clipboard', (False, ""))[0]:
-                print("WARNING: Clipboard access may be restricted")
-            
+                self.logger.warning("Clipboard access may be restricted")
+
             # Check keyboard (tuple with (status, message))
             if not permissions.get('keyboard', (False, ""))[0]:
-                print("WARNING: Keyboard access may be restricted")
-                print("  Global hotkeys may not work without keyboard module")
+                self.logger.warning("Keyboard access may be restricted")
+                self.logger.warning("  Global hotkeys may not work without keyboard module")
             
             # Admin is optional - just log status
             if permissions.get('admin', (False, ""))[0]:
@@ -312,38 +313,38 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                 self.clipboard = clipboard_manager.ClipboardManager(self.config)
                 self.log("Clipboard manager initialized")
             except Exception as e:
-                print(f"WARNING: Clipboard manager initialization failed: {e}")
-                print("  Clipboard capture may not work")
+                self.logger.warning(f"Clipboard manager initialization failed: {e}")
+                self.logger.warning("  Clipboard capture may not work")
             
             # Load filter file
             self.log("Loading filter file...")
             filter_path = self.config.get('filter_file')
             
             if not filter_path or not os.path.exists(filter_path):
-                print("ERROR: Filter file not found. Please configure in settings.")
-                print(f"  Expected: {filter_path}")
+                self.logger.error("Filter file not found. Please configure in settings.")
+                self.logger.error(f"  Expected: {filter_path}")
                 return False
-            
+
             # Validate filter file before loading
             try:
                 file_size = os.path.getsize(filter_path)
                 max_size = constants.MAX_FILTER_FILE_SIZE_MB * 1024 * 1024
                 if file_size > max_size:
-                    print(f"ERROR: Filter file too large ({file_size} bytes). Maximum: {max_size} bytes")
+                    self.logger.error(f"Filter file too large ({file_size} bytes). Maximum: {max_size} bytes")
                     return False
-                
+
                 with open(filter_path, 'r', encoding='utf-8') as test_file:
                     for i, line in enumerate(test_file):
                         if i >= 1000:
                             break
                         if len(line.strip()) > constants.MAX_FILTER_LINE_LENGTH:
-                            print(f"WARNING: Filter file contains very long lines (line {i+1})")
-                            
+                            self.logger.warning(f"Filter file contains very long lines (line {i+1})")
+
             except UnicodeDecodeError as e:
-                print(f"ERROR: Filter file has invalid encoding: {e}")
+                self.logger.error(f"Filter file has invalid encoding: {e}")
                 return False
             except Exception as e:
-                print(f"ERROR: Filter file validation failed: {e}")
+                self.logger.error(f"Filter file validation failed: {e}")
                 return False
             
             loader = filter_loader.FilterLoader()
@@ -356,7 +357,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.filter_loader = loader
             
             if self.automaton is None:
-                print("ERROR: Failed to load filter file")
+                self.logger.error("Failed to load filter file")
                 return False
             
             # Store stats for settings dialog
@@ -422,7 +423,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             return True
             
         except Exception as e:
-            print(f"ERROR: Initialization failed: {e}")
+            self.logger.error(f"Initialization failed: {e}")
             if self.debug:
                 traceback.print_exc()
             return False
@@ -447,8 +448,8 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             
             # Start listening
             if not self.hotkey.start():
-                print(f"WARNING: Could not register hotkey: {hotkey_combo}")
-                print("  Hotkey may already be in use by another application")
+                self.logger.warning(f"Could not register hotkey: {hotkey_combo}")
+                self.logger.warning("  Hotkey may already be in use by another application")
                 return False
             
             self.log("Normal hotkey registered successfully")
@@ -460,8 +461,8 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.force_hotkey = hotkey_handler.HotkeyHandler(force_hotkey_combo, self.on_force_hotkey_pressed_callback)
             
             if not self.force_hotkey.start():
-                print(f"WARNING: Could not register force optimize hotkey: {force_hotkey_combo}")
-                print("  Hotkey may already be in use by another application")
+                self.logger.warning(f"Could not register force optimize hotkey: {force_hotkey_combo}")
+                self.logger.warning("  Hotkey may already be in use by another application")
                 # Continue anyway - normal hotkey still works
             else:
                 self.log("Force optimize hotkey registered successfully")
@@ -476,8 +477,8 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.toggle_hotkey = hotkey_handler.HotkeyHandler(toggle_hotkey_combo, self.on_toggle_hotkey_pressed_callback)
             
             if not self.toggle_hotkey.start():
-                print(f"WARNING: Could not register toggle hotkeys hotkey: {toggle_hotkey_combo}")
-                print("  Hotkey may already be in use by another application")
+                self.logger.warning(f"Could not register toggle hotkeys hotkey: {toggle_hotkey_combo}")
+                self.logger.warning("  Hotkey may already be in use by another application")
             else:
                 self.log("Toggle hotkeys hotkey registered successfully")
             
@@ -497,7 +498,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             return True
             
         except Exception as e:
-            print(f"ERROR: Hotkey setup failed: {e}")
+            self.logger.error(f"Hotkey setup failed: {e}")
             return False
     
     def show_notification(self, title: str, message: str, notification_type: str = 'info', duration: int = None):
@@ -695,7 +696,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.log("UI components initialized")
         
         except Exception as e:
-            print(f"WARNING: UI initialization failed: {e}")
+            self.logger.warning(f"UI initialization failed: {e}")
             import traceback
             traceback.print_exc()
     
@@ -814,7 +815,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             
             # Capture text from active window using clipboard manager
             if not self.clipboard:
-                print("ERROR: Clipboard manager not initialized")
+                self.logger.error("Clipboard manager not initialized")
                 return
             
             self.log("Capturing text from active window...")
@@ -890,13 +891,13 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                         )
                         self.log("show_detection() call completed")
                     except Exception as e:
-                        print(f"ERROR: Failed to show overlay: {e}")
+                        self.logger.error(f"Failed to show overlay: {e}")
                         if self.debug:
                             traceback.print_exc()
                 else:
-                    print(f"Detected words: {', '.join(result.flagged_words)}")
+                    self.logger.info(f"Detected words: {', '.join(result.flagged_words)}")
                     if result.suggested:
-                        print(f"Suggested: {result.suggested}")
+                        self.logger.info(f"Suggested: {result.suggested}")
                 
             elif result.action == 'optimize':
                 # Auto mode or force mode - auto-optimized
@@ -967,12 +968,12 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                         None
                     )
                 else:
-                    print(f"Could not optimize. Detected: {', '.join(result.flagged_words)}")
-            
+                    self.logger.info(f"Could not optimize. Detected: {', '.join(result.flagged_words)}")
+
             self.log("Hotkey handler completed")
-            
+
         except Exception as e:
-            print(f"ERROR: Hotkey handler failed: {e}")
+            self.logger.error(f"Hotkey handler failed: {e}")
             if self.debug:
                 traceback.print_exc()
         finally:
@@ -1115,7 +1116,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             else:
                 # Fallback to default icon
                 icon = QIcon()
-                print(f"WARNING: Tray icon not found at {icon_path}")
+                self.logger.warning(f"Tray icon not found at {icon_path}")
             
             self.tray_icon = QSystemTrayIcon(icon, self.app)
             self.log("Setting up system tray...")
@@ -1296,7 +1297,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             return True
             
         except Exception as e:
-            print(f"WARNING: Could not create system tray icon: {e}")
+            self.logger.warning(f"Could not create system tray icon: {e}")
             return False
     
     def apply_settings_live(self):
@@ -1562,7 +1563,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                 self.log("Hotkeys re-registered")
             
         except Exception as e:
-            print(f"ERROR: Failed to apply settings: {e}")
+            self.logger.error(f"Failed to apply settings: {e}")
     
     def on_settings_closed(self, result):
         """
@@ -1996,7 +1997,7 @@ Optimization:
             
             # Setup hotkey
             if not self.setup_hotkey():
-                print("WARNING: Running without hotkey support")
+                self.logger.warning("Running without hotkey support")
             
             # Setup GUI if available
             if PYQT5_AVAILABLE:
@@ -2070,7 +2071,7 @@ Optimization:
                 return 0
             
         except Exception as e:
-            print(f"ERROR: Application failed: {e}")
+            self.logger.error(f"Application failed: {e}")
             if self.debug:
                 traceback.print_exc()
             return 1
@@ -2142,11 +2143,27 @@ def main():
     )
     
     args = parser.parse_args()
-    
+
+    # Initialize centralized logging (v1.1 feature)
+    from COCK import logger
+    app_logger = logger.setup_logger(
+        name="COCK",
+        level="DEBUG" if args.debug else "INFO",
+        log_to_file=True,
+        log_to_console=True,
+        debug_mode=args.debug
+    )
+    app_logger.info("="*60)
+    app_logger.info("COCK Profanity Processor - Application Starting")
+    app_logger.info("="*60)
+    app_logger.info(f"Debug mode: {args.debug}")
+    if args.config:
+        app_logger.info(f"Config file: {args.config}")
+
     # Process events before creating tool
     if app:
         app.processEvents()
-    
+
     # Create application instance, passing the app if we created one
     tool = COCK(config_path=args.config, debug=args.debug, app=app)
     

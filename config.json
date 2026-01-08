@@ -1,0 +1,67 @@
+{
+    "version": "1.0",
+    "filter_file": "Z:\\Git\\COCK_Git_Main\\COCK-profanity-processor\\filter_default.txt",
+    "detection_mode": "auto",
+    "hotkey": "f12",
+    "force_optimize_hotkey": "ctrl+f12",
+    "toggle_hotkeys_hotkey": "ctrl+alt+c",
+    "hotkeys_enabled": true,
+    "keyboard_delay_ms": 100,
+    "sliding_window_size": 3,
+    "auto_send": {
+        "enabled": false,
+        "delay_ms": 100,
+        "key_combo": "enter"
+    },
+    "ui": {
+        "theme": "dark",
+        "show_debug_info": false,
+        "notification_position": "bottom-right",
+        "prompt_position": "center",
+        "notification_sound": true,
+        "prompt_sound": true,
+        "notification_offset_x": 20,
+        "notification_offset_y": 20,
+        "prompt_offset_x": 0,
+        "prompt_offset_y": 0,
+        "notification_scale": 1.0,
+        "prompt_scale": 1.0,
+        "settings_scale": 1.0
+    },
+    "optimization": {
+        "leet_speak": true,
+        "fancy_unicode": true,
+        "shorthand": true,
+        "link_protection": true,
+        "special_char_interspacing": true,
+        "fancy_text_style": "circled"
+    },
+    "performance": {
+        "max_filter_load_time_ms": 500,
+        "max_detection_time_ms": 50
+    },
+    "paths": {
+        "whitelist_file": "Z:\\Git\\COCK_Git_Main\\COCK-profanity-processor\\whitelist.txt"
+    },
+    "updates": {
+        "check_enabled": true,
+        "check_frequency": "startup",
+        "last_check": null
+    },
+    "help": {
+        "show_tooltips": true,
+        "show_first_run_guide": true
+    },
+    "max_sliding_window": 3,
+    "special_char_interspacing": {
+        "character": "❤"
+    },
+    "notifications": {
+        "enabled": true,
+        "show_clean_messages": true,
+        "show_optimized_messages": true,
+        "duration_ms": 2000
+    },
+    "byte_limit": 92,
+    "character_limit": 80
+}

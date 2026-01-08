@@ -14,6 +14,10 @@ Features:
 import os
 from typing import Set, Optional
 import threading
+from logger import get_logger
+
+# Module logger
+log = get_logger(__name__)
 
 
 class WhitelistManager:
@@ -70,7 +74,7 @@ class WhitelistManager:
                     if word and not word.startswith('#'):
                         words.add(word)
         except Exception as e:
-            print(f"WARNING: Failed to load {filepath}: {e}")
+            log.warning(f"Failed to load {filepath}: {e}")
         
         return words
     
@@ -167,7 +171,7 @@ class WhitelistManager:
             
             return True
         except Exception as e:
-            print(f"ERROR: Failed to save whitelist: {e}")
+            log.error(f"Failed to save whitelist: {e}")
             return False
     
     def export_words(self) -> Set[str]:
@@ -182,5 +186,5 @@ class WhitelistManager:
 
 
 # Module information
-__version__ = '1.0.0'
+__version__ = '1.1.0'  # Updated to use centralized logging
 __author__ = 'Jokoril'

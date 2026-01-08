@@ -185,6 +185,80 @@ def get_resource_file(filename):
         return possible_paths[0]
 
 
+def validate_user_file_path(filepath: str, allowed_extensions: list = None) -> str:
+    """
+    Validate a user-provided file path for security
+
+    This is more permissive than get_data_file() - allows subdirectories
+    but still prevents traversal outside the app directory.
+
+    Args:
+        filepath: User-provided file path (relative or absolute)
+        allowed_extensions: Optional list of allowed file extensions (e.g., ['.txt', '.json'])
+
+    Returns:
+        str: Validated absolute path
+
+    Raises:
+        ValueError: If path is unsafe or invalid
+
+    Example:
+        >>> validate_user_file_path("filters/game1.txt", ['.txt'])
+        "Z:\\App\\filters\\game1.txt"
+        >>> validate_user_file_path("../../../etc/passwd")
+        ValueError: Path traversal attempt detected
+    """
+    if not filepath:
+        raise ValueError("File path cannot be empty")
+
+    # Get app directory as base
+    app_dir = get_app_dir()
+
+    # If path is absolute, check if it's within app directory
+    if os.path.isabs(filepath):
+        abs_path = os.path.abspath(filepath)
+    else:
+        # Relative path - join with app directory
+        abs_path = os.path.abspath(os.path.join(app_dir, filepath))
+
+    # Security check: Ensure final path is within app directory
+    app_dir_normalized = os.path.abspath(app_dir) + os.sep
+    abs_path_normalized = os.path.abspath(abs_path)
+
+    # Check if path is within or equal to app directory
+    if not (abs_path_normalized.startswith(app_dir_normalized) or abs_path_normalized == os.path.abspath(app_dir)):
+        raise ValueError(f"Path traversal attempt detected: '{filepath}' resolves outside application directory")
+
+    # Validate file extension if specified
+    if allowed_extensions:
+        _, ext = os.path.splitext(abs_path)
+        if ext.lower() not in [e.lower() for e in allowed_extensions]:
+            raise ValueError(f"Invalid file extension: '{ext}'. Allowed: {allowed_extensions}")
+
+    return abs_path
+
+
+def is_path_safe(filepath: str, base_dir: str = None) -> bool:
+    """
+    Check if a file path is safe (doesn't traverse outside base directory)
+
+    Args:
+        filepath: Path to check
+        base_dir: Base directory to restrict to (defaults to app directory)
+
+    Returns:
+        bool: True if path is safe, False if traversal detected
+    """
+    if base_dir is None:
+        base_dir = get_app_dir()
+
+    try:
+        validate_user_file_path(filepath)
+        return True
+    except ValueError:
+        return False
+
+
 # Module information
-__version__ = '1.0.1'  # Updated for cct/ package structure
+__version__ = '1.0.2'  # Added user file path validation for v1.0.1 security fixes
 __author__ = 'Chat Censor Tool Team'
