@@ -15,6 +15,7 @@ Features:
 import time
 from typing import Tuple, Dict, Set, Optional
 from logger import get_logger
+from validators import validate_filter_file
 
 # Module logger
 log = get_logger(__name__)
@@ -63,6 +64,16 @@ class FilterLoader:
         
         if ahocorasick is None:
             return (None, {"error": "pyahocorasick not installed"})
+
+        # Validate filter file FIRST (v1.2 - centralized validation)
+        is_valid, validated_path, error = validate_filter_file(filepath)
+        if not is_valid:
+            error_msg = f"Filter file validation failed: {error}"
+            log.error(error_msg)
+            return (None, {"error": error_msg})
+
+        # Use validated path
+        filepath = validated_path
 
         # Store filepath for reload
         self.filepath = filepath

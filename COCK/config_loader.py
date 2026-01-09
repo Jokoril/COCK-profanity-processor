@@ -19,6 +19,7 @@ import path_manager
 import tempfile
 import shutil
 from logger import get_logger
+from validators import validate_integer_range, validate_float_range, validate_choice, validate_file_path
 
 # Module logger
 log = get_logger(__name__)
@@ -343,101 +344,142 @@ class ConfigLoader:
     
     def _sanitize_config_paths(self) -> None:
         """
-        Sanitize all file paths in configuration to prevent path traversal
+        Sanitize all file paths in configuration using centralized validators (v1.2)
 
         Security fix for v1.0.1: Validates user-provided file paths to ensure
         they don't escape the application directory (e.g., ../../../etc/passwd)
+
+        v1.2: Migrated to use validators.validate_file_path() for consistency
         """
         if not self.config:
             return
 
         # Validate filter_file (required, must be .txt)
         if self.config.get('filter_file'):
-            try:
-                validated_path = path_manager.validate_user_file_path(
-                    self.config['filter_file'],
-                    allowed_extensions=['.txt']
-                )
-                self.config['filter_file'] = validated_path
-            except ValueError as e:
-                log.warning(f"SECURITY WARNING: Invalid filter_file path blocked: {e}")
+            is_valid, validated_path, error = validate_file_path(
+                self.config['filter_file'],
+                allowed_extensions=['.txt']
+            )
+
+            if not is_valid:
+                log.warning(f"SECURITY WARNING: Invalid filter_file path: {error}")
                 # Fall back to default
                 self.config['filter_file'] = path_manager.get_data_file('filter_default.txt')
+            else:
+                self.config['filter_file'] = validated_path
 
         # Validate paths section
         if 'paths' in self.config:
             for key in ['whitelist_file', 'shorthand_file']:
                 if key in self.config['paths'] and self.config['paths'][key]:
-                    try:
-                        validated_path = path_manager.validate_user_file_path(
-                            self.config['paths'][key],
-                            allowed_extensions=['.txt']
-                        )
-                        self.config['paths'][key] = validated_path
-                    except ValueError as e:
-                        log.warning(f"SECURITY WARNING: Invalid {key} path blocked: {e}")
+                    is_valid, validated_path, error = validate_file_path(
+                        self.config['paths'][key],
+                        allowed_extensions=['.txt']
+                    )
+
+                    if not is_valid:
+                        log.warning(f"SECURITY WARNING: Invalid {key} path: {error}")
                         # Fall back to default filename in app directory
-                        default_filename = key  # e.g., 'whitelist_file' -> 'whitelist_file'
                         self.config['paths'][key] = path_manager.get_data_file(f"{key.replace('_file', '.txt')}")
+                    else:
+                        self.config['paths'][key] = validated_path
 
     def _validate_config_values(self) -> None:
         """
-        Validate configuration values to ensure they're within safe ranges
+        Validate configuration values using centralized validators (v1.2)
 
         Security fix for v1.0.1: Prevents malformed configs from causing crashes
         or unexpected behavior (e.g., negative limits, huge numbers)
+
+        v1.2: Migrated to use validators module for consistency
         """
         if not self.config:
             return
 
         # Validate sliding_window_size (2-5 range)
         if 'sliding_window_size' in self.config:
-            size = self.config['sliding_window_size']
-            if not isinstance(size, int) or size < 2 or size > 5:
-                log.warning(f"Invalid sliding_window_size={size}, clamping to 3")
-                self.config['sliding_window_size'] = 3
+            is_valid, value, error = validate_integer_range(
+                self.config['sliding_window_size'],
+                min_val=2,
+                max_val=5,
+                default=3,
+                name='sliding_window_size'
+            )
+            if not is_valid:
+                log.warning(error)
+            self.config['sliding_window_size'] = value
 
         # Validate keyboard_delay_ms (0-5000 range)
         if 'keyboard_delay_ms' in self.config:
-            delay = self.config['keyboard_delay_ms']
-            if not isinstance(delay, int) or delay < 0 or delay > 5000:
-                log.warning(f"Invalid keyboard_delay_ms={delay}, clamping to 100")
-                self.config['keyboard_delay_ms'] = 100
+            is_valid, value, error = validate_integer_range(
+                self.config['keyboard_delay_ms'],
+                min_val=0,
+                max_val=5000,
+                default=100,
+                name='keyboard_delay_ms'
+            )
+            if not is_valid:
+                log.warning(error)
+            self.config['keyboard_delay_ms'] = value
 
         # Validate auto_send delay
         if 'auto_send' in self.config and 'delay_ms' in self.config['auto_send']:
-            delay = self.config['auto_send']['delay_ms']
-            if not isinstance(delay, int) or delay < 0 or delay > 5000:
-                log.warning(f"Invalid auto_send.delay_ms={delay}, clamping to 100")
-                self.config['auto_send']['delay_ms'] = 100
+            is_valid, value, error = validate_integer_range(
+                self.config['auto_send']['delay_ms'],
+                min_val=0,
+                max_val=5000,
+                default=100,
+                name='auto_send.delay_ms'
+            )
+            if not is_valid:
+                log.warning(error)
+            self.config['auto_send']['delay_ms'] = value
 
         # Validate UI scale values (0.5-2.0 range)
         if 'ui' in self.config:
             for scale_key in ['notification_scale', 'prompt_scale', 'settings_scale']:
                 if scale_key in self.config['ui']:
-                    scale = self.config['ui'][scale_key]
-                    if not isinstance(scale, (int, float)) or scale < 0.5 or scale > 2.0:
-                        log.warning(f"Invalid ui.{scale_key}={scale}, clamping to 1.0")
-                        self.config['ui'][scale_key] = 1.0
+                    is_valid, value, error = validate_float_range(
+                        self.config['ui'][scale_key],
+                        min_val=0.5,
+                        max_val=2.0,
+                        default=1.0,
+                        name=f'ui.{scale_key}'
+                    )
+                    if not is_valid:
+                        log.warning(error)
+                    self.config['ui'][scale_key] = value
 
         # Validate UI offsets (-1000 to 1000 pixels)
         if 'ui' in self.config:
             for offset_key in ['notification_offset_x', 'notification_offset_y', 'prompt_offset_x', 'prompt_offset_y']:
                 if offset_key in self.config['ui']:
-                    offset = self.config['ui'][offset_key]
-                    if not isinstance(offset, int) or offset < -1000 or offset > 1000:
-                        log.warning(f"Invalid ui.{offset_key}={offset}, clamping to 0")
-                        self.config['ui'][offset_key] = 0
+                    is_valid, value, error = validate_integer_range(
+                        self.config['ui'][offset_key],
+                        min_val=-1000,
+                        max_val=1000,
+                        default=0,
+                        name=f'ui.{offset_key}'
+                    )
+                    if not is_valid:
+                        log.warning(error)
+                    self.config['ui'][offset_key] = value
 
         # Validate performance limits (10-10000ms range)
         if 'performance' in self.config:
             for key in ['max_filter_load_time_ms', 'max_detection_time_ms']:
                 if key in self.config['performance']:
-                    limit = self.config['performance'][key]
-                    if not isinstance(limit, int) or limit < 10 or limit > 10000:
-                        default = 500 if 'load' in key else 50
-                        log.warning(f"Invalid performance.{key}={limit}, resetting to {default}")
-                        self.config['performance'][key] = default
+                    default_val = 500 if 'load' in key else 50
+                    is_valid, value, error = validate_integer_range(
+                        self.config['performance'][key],
+                        min_val=10,
+                        max_val=10000,
+                        default=default_val,
+                        name=f'performance.{key}'
+                    )
+                    if not is_valid:
+                        log.warning(error)
+                    self.config['performance'][key] = value
     
     def _merge_with_defaults(self, loaded_config: Dict[str, Any]) -> Dict[str, Any]:
         """
