@@ -175,6 +175,7 @@ class FilterLoader:
 
         v1.0.3: Added error recovery - keeps old automaton if reload fails.
         v1.0.3: Added performance monitoring.
+        v1.2: Migrated to use centralized error_handler module.
 
         Args:
             verbose: Print loading statistics
@@ -189,7 +190,7 @@ class FilterLoader:
             if new_automaton is not None:
                 detector.update_automaton(new_automaton)
         """
-        import time
+        from error_handler import monitor_performance
 
         if not self.filepath:
             error_msg = "No filepath set - call load() first before reload()"
@@ -198,41 +199,30 @@ class FilterLoader:
 
         log.info(f"Reloading filter list from: {self.filepath}")
 
-        # Performance monitoring (v1.0.3)
-        start_time = time.perf_counter()
-
-        # Store old automaton as backup (v1.0.3)
+        # Store old automaton as backup (error recovery pattern)
         old_automaton = self.automaton
         old_stats = self.stats.copy() if self.stats else {}
         old_filter_words = self.filter_words.copy() if self.filter_words else set()
 
         try:
-            # Try to reload
-            new_automaton, new_stats = self.load(self.filepath, verbose)
+            # Reload with performance monitoring (v1.2)
+            with monitor_performance("Filter reload", warn_threshold_ms=500):
+                new_automaton, new_stats = self.load(self.filepath, verbose)
 
-            if new_automaton is None:
-                # Reload failed - restore old automaton
-                log.error("Reload failed - keeping existing filter list")
-                self.automaton = old_automaton
-                self.stats = old_stats
-                self.filter_words = old_filter_words
-                return (old_automaton, {"error": "Reload failed, using cached version", **old_stats})
+                if new_automaton is None:
+                    # Reload failed - restore old automaton
+                    log.error("Reload failed - keeping existing filter list")
+                    self.automaton = old_automaton
+                    self.stats = old_stats
+                    self.filter_words = old_filter_words
+                    return (old_automaton, {"error": "Reload failed, using cached version", **old_stats})
 
-            # Performance logging (v1.0.3)
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            log.info(f"Filter reload completed in {elapsed_ms:.1f}ms")
-
-            # Warn if slow
-            if elapsed_ms > 500:
-                log.warning(f"Slow filter reload: {elapsed_ms:.1f}ms exceeds 500ms target")
-
-            # Success
-            return (new_automaton, new_stats)
+                # Success
+                return (new_automaton, new_stats)
 
         except Exception as e:
             # Critical error - restore backup
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            log.error(f"Critical reload error after {elapsed_ms:.1f}ms: {e}")
+            log.error(f"Critical reload error: {e}")
             self.automaton = old_automaton
             self.stats = old_stats
             self.filter_words = old_filter_words

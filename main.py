@@ -289,9 +289,17 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             # Use ConfigLoader class
             self.config_loader = config_loader.ConfigLoader(config_path)
             self.config = self.config_loader.load()
-            
+
             self.log(f"Config loaded successfully")
-            
+
+            # Enable config hot-reload (v1.2)
+            try:
+                self.config_loader.register_callback(self._on_config_reloaded)
+                self.config_loader.watch_for_changes(enable=True)
+                self.log("Config hot-reload enabled")
+            except Exception as e:
+                self.logger.warning(f"Config hot-reload setup failed: {e}")
+
             # Check permissions
             permissions = permission_manager.check_permissions()
 
@@ -356,7 +364,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             # Store filter loader for export functionality
             self.filter_loader = loader
 
-            # Setup file watcher for auto-reload (v1.0.3)
+            # Setup file watcher for auto-reload (v1.0.3, v1.2 thread-safe)
             self.file_watcher = None
             if filter_path and os.path.exists(filter_path):
                 try:
@@ -364,7 +372,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                     self.file_watcher = FileWatcher()
                     self.file_watcher.watch_file(
                         filter_path,
-                        lambda: self.reload_filter(verbose=False)
+                        lambda: self.reload_filter(verbose=False, show_ui_notifications=False)
                     )
                     self.file_watcher.start()
                     self.logger.info(f"File watcher enabled for: {filter_path}")
@@ -396,7 +404,24 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
                     f.write("# Example: 'ass' is safe in 'assassin' but flagged when standalone\n\n")
             
             self.wl_manager = whitelist_manager.WhitelistManager(whitelist_path)
-            
+
+            # Setup whitelist file watcher for auto-reload (v1.2)
+            self.whitelist_watcher = None
+            if whitelist_path and os.path.exists(whitelist_path):
+                try:
+                    from COCK.file_watcher import FileWatcher
+                    self.whitelist_watcher = FileWatcher()
+                    self.whitelist_watcher.watch_file(
+                        whitelist_path,
+                        lambda: self.reload_whitelist()
+                    )
+                    self.whitelist_watcher.start()
+                    self.logger.info(f"Whitelist watcher enabled for: {whitelist_path}")
+                except ImportError:
+                    pass  # Already warned about watchdog for filter watcher
+                except Exception as e:
+                    self.logger.error(f"Failed to start whitelist watcher: {e}")
+
             self.detector = fast_detector.FastCensorDetector(
                 self.automaton,
                 self.wl_manager.get_whitelist(),
@@ -1318,40 +1343,140 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.logger.warning(f"Could not create system tray icon: {e}")
             return False
     
-    def apply_settings_live(self):
-        """Apply settings without restart"""
-        
+    def _on_config_reloaded(self, new_config):
+        """
+        Callback when config file changes externally (v1.2)
+
+        Applies non-UI settings only (thread-safe).
+
+        Note: Called from file watcher thread. Only non-UI operations are safe.
+        Qt operations like self.log() (debug window), overlays, notifications
+        must NOT be called from this thread.
+
+        Args:
+            new_config: New configuration dictionary from config_loader
+        """
+        self.logger.info("Configuration reloaded from file, applying thread-safe settings...")
+        self.config = new_config
+
+        # Thread-safe: Update optimizer settings (no UI involved)
+        try:
+            # Update optimizer's config reference (for fancy_text_style)
+            self.optimizer.config = new_config
+
+            # Update optimizer flags
+            self.optimizer.enable_leet = self.config.get('optimization', {}).get('leet_speak', True)
+            self.optimizer.enable_unicode = self.config.get('optimization', {}).get('fancy_unicode', True)
+            self.optimizer.enable_shorthand = self.config.get('optimization', {}).get('shorthand', True)
+            self.optimizer.enable_link_protection = self.config.get('optimization', {}).get('link_protection', True)
+            self.optimizer.enable_special_char = self.config.get('optimization', {}).get('special_char_interspacing', False)
+            self.optimizer.byte_limit = self.config.get('byte_limit', 80)
+
+            # Recreate special_char instance with new config (for character changes)
+            import special_char_interspacing
+            self.optimizer.special_char = special_char_interspacing.SpecialCharInterspacing(new_config)
+
+            self.logger.info("Optimizer settings updated from config file")
+        except Exception as e:
+            self.logger.error(f"Failed to update optimizer settings: {e}")
+
+        # Note: UI-related settings (overlays, hotkeys, detector rebuild) require
+        # main thread. User should use Settings dialog for those, or restart app.
+        self.logger.info("Config reload complete. UI settings require Settings dialog or restart.")
+
+    def apply_settings_live(self, config=None):
+        """
+        Apply settings without restart
+
+        Args:
+            config: Optional config dict to use (defaults to reloading from file)
+
+        v1.2: Enhanced to accept config parameter for hot-reload
+        v1.2.1: Added filter file path change detection
+        """
+        # Use provided config or reload from file
+        if config is None:
+            config = self.config_loader.load()
+
+        # Store old filter file path for comparison (v1.2.1)
+        # NOTE: Use filter_loader.filepath, not self.config, because self.config
+        # may already be updated by on_settings_saved() before this method is called
+        old_filter_file = ''
+        if hasattr(self, 'filter_loader') and self.filter_loader and self.filter_loader.filepath:
+            old_filter_file = self.filter_loader.filepath
+
+        self.config = config
+
         # Store old values for comparison
-        old_sliding_window = self.config.get('max_sliding_window', 3)
-        old_whitelist_size = len(self.wl_manager.get_whitelist())
-        
-        # Update config
-        self.config = self.config_loader.load()
-        
+        old_sliding_window = config.get('max_sliding_window', 3)
+        old_whitelist = self.wl_manager.get_whitelist().copy()  # Get actual content, not just size
+
         # Check what changed
         needs_detector_rebuild = False
-        
+
         # Check 1: Sliding window changed
         new_sliding_window = self.config.get('max_sliding_window', 3)
         if new_sliding_window != old_sliding_window:
             self.log(f"Sliding window changed: {old_sliding_window} -> {new_sliding_window}")
             needs_detector_rebuild = True
-        
+
         # Check 2: Whitelist changed (from Settings Save button or tray)
         # Reload whitelist from file
         self.wl_manager._load_whitelist()
-        new_whitelist_size = len(self.wl_manager.get_whitelist())
-        if new_whitelist_size != old_whitelist_size:
-            self.log(f"Whitelist changed: {old_whitelist_size} -> {new_whitelist_size} entries")
+        new_whitelist = self.wl_manager.get_whitelist()
+        if new_whitelist != old_whitelist:  # Compare content, not just size (v1.2 fix)
+            self.log(f"Whitelist changed: {len(old_whitelist)} -> {len(new_whitelist)} entries")
             needs_detector_rebuild = True
-        
+
+        # Check 3: Filter file path changed (v1.2.1 fix)
+        new_filter_file = config.get('filter_file', '')
+        self.logger.debug(f"Filter file check: old='{old_filter_file}' new='{new_filter_file}'")
+        if new_filter_file and os.path.exists(new_filter_file) and new_filter_file != old_filter_file:
+            self.log(f"Filter file changed: {old_filter_file} -> {new_filter_file}")
+
+            # Update filter_loader's filepath
+            if hasattr(self, 'filter_loader') and self.filter_loader:
+                self.filter_loader.filepath = new_filter_file
+
+            # Update file watcher to watch new file
+            if hasattr(self, 'file_watcher') and self.file_watcher:
+                try:
+                    self.file_watcher.stop()
+                    from COCK.file_watcher import FileWatcher
+                    self.file_watcher = FileWatcher()
+                    self.file_watcher.watch_file(
+                        new_filter_file,
+                        lambda: self.reload_filter(verbose=False, show_ui_notifications=False)
+                    )
+                    self.file_watcher.start()
+                    self.logger.info(f"File watcher updated for: {new_filter_file}")
+                except Exception as e:
+                    self.logger.error(f"Failed to update file watcher: {e}")
+
+            # Reload filter and rebuild automaton
+            if self.reload_filter(verbose=True):
+                self.log("Filter reloaded with new file")
+                # Update filter_stats for UI
+                self.filter_stats = self.filter_loader.get_stats()
+            else:
+                self.logger.error("Filter reload failed for new file")
+
+            # Continue with rest of settings (don't return early)
+            # The detector is already rebuilt by reload_filter()
+            needs_detector_rebuild = False
+
         # Update optimizer settings (these don't need detector rebuild)
+        self.optimizer.config = self.config  # Update config reference (v1.2: for fancy_text_style)
         self.optimizer.enable_leet = self.config.get('optimization', {}).get('leet_speak', True)
         self.optimizer.enable_unicode = self.config.get('optimization', {}).get('fancy_unicode', True)
         self.optimizer.enable_shorthand = self.config.get('optimization', {}).get('shorthand', True)
         self.optimizer.enable_link_protection = self.config.get('optimization', {}).get('link_protection', True)
         self.optimizer.enable_special_char = self.config.get('optimization', {}).get('special_char_interspacing', False)
         self.optimizer.byte_limit = self.config.get('byte_limit', 80)
+
+        # Recreate special_char instance with new config (v1.2: for character changes)
+        import special_char_interspacing
+        self.optimizer.special_char = special_char_interspacing.SpecialCharInterspacing(self.config)
         
         # Update hotkey if changed
         new_hotkey = self.config.get('hotkey', 'ctrl+shift+v')
@@ -1422,7 +1547,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
 
         self.log("✓ All settings applied successfully (no restart needed)")
 
-    def reload_filter(self, verbose: bool = False):
+    def reload_filter(self, verbose: bool = False, show_ui_notifications: bool = True):
         """
         Reload filter list from file and update detector
 
@@ -1430,9 +1555,11 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         without requiring application restart (v1.0.2 feature).
 
         v1.0.3: Added error notifications for reload failures.
+        v1.2: Added show_ui_notifications parameter for thread safety.
 
         Args:
             verbose: Print loading statistics
+            show_ui_notifications: Show Qt notifications (disable when called from background thread)
 
         Returns:
             bool: True if reload successful, False otherwise
@@ -1440,6 +1567,9 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         Example:
             # After UI adds a filter entry
             cock.reload_filter()
+
+            # From file watcher (background thread)
+            cock.reload_filter(show_ui_notifications=False)
         """
         if not hasattr(self, 'filter_loader') or not self.filter_loader:
             self.logger.error("Filter loader not initialized")
@@ -1454,8 +1584,8 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             error = stats.get('error', 'Unknown error')
             self.logger.error(f"Filter reload failed: {error}")
 
-            # Show user notification (v1.0.3)
-            if PYQT5_AVAILABLE and hasattr(self, 'show_notification'):
+            # Show user notification only if safe to do so (v1.0.3, v1.2 thread-safe)
+            if show_ui_notifications and PYQT5_AVAILABLE and hasattr(self, 'show_notification'):
                 self.show_notification(
                     "Filter Reload Failed",
                     f"Error: {error}\nUsing previous filter list.",
@@ -1472,6 +1602,36 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
 
         self.logger.info(f"Filter reloaded successfully - {stats.get('final_count', 0)} entries active")
         return True
+
+    def reload_whitelist(self):
+        """
+        Reload whitelist from file and update detector (v1.2)
+
+        Thread-safe: Can be called from file watcher background thread.
+
+        Returns:
+            bool: True if reload successful
+        """
+        if not hasattr(self, 'wl_manager') or not self.wl_manager:
+            self.logger.error("Whitelist manager not initialized")
+            return False
+
+        self.logger.info("Reloading whitelist...")
+
+        try:
+            # Reload whitelist from file
+            self.wl_manager._load_whitelist()
+            new_whitelist = self.wl_manager.get_whitelist()
+
+            # Update detector's whitelist directly (thread-safe)
+            self.detector.update_whitelist(new_whitelist)
+
+            self.logger.info(f"Whitelist reloaded successfully - {len(new_whitelist)} entries active")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Whitelist reload failed: {e}")
+            return False
 
     def sync_notification_settings(self):
         """Sync notification settings between config and tray menu"""
@@ -2154,6 +2314,17 @@ Optimization:
             if hasattr(self, 'file_watcher') and self.file_watcher:
                 self.logger.info("Stopping file watcher...")
                 self.file_watcher.stop()
+
+            # Stop whitelist watcher (v1.2)
+            if hasattr(self, 'whitelist_watcher') and self.whitelist_watcher:
+                self.logger.info("Stopping whitelist watcher...")
+                self.whitelist_watcher.stop()
+
+            # Stop config watcher (v1.2)
+            if hasattr(self, 'config_loader') and self.config_loader:
+                if self.config_loader.is_watching():
+                    self.logger.info("Stopping config watcher...")
+                    self.config_loader.watch_for_changes(enable=False)
 
             # Stop hotkey listener
             if hasattr(self, 'hotkey') and self.hotkey:

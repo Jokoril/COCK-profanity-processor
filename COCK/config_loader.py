@@ -14,7 +14,7 @@ Features:
 
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 import path_manager
 import tempfile
 import shutil
@@ -110,60 +110,52 @@ class ConfigLoader:
     def __init__(self, config_path: Optional[str] = None):
         """
         Initialize configuration loader
-        
+
         Args:
             config_path: Optional custom config file path.
                         If None, uses default 'config.json' in app directory.
         """
         if config_path is None:
             config_path = path_manager.get_data_file('config.json')
-        
+
         self.config_path = config_path
         self.config = None
+
+        # Hot-reload infrastructure (v1.2)
+        self._watcher = None
+        self._reload_callbacks = []
+        self._watching = False
     
     def load(self) -> Dict[str, Any]:
         """
         Load configuration from file
-        
+
         Returns:
             dict: Configuration dictionary
-            
+
         Behavior:
             - If file doesn't exist, creates it with defaults
             - If file is corrupted, backs it up and creates new one
             - Merges with defaults to ensure all keys exist
+
+        v1.2: Migrated to use centralized error_handler module.
         """
+        from error_handler import safe_execute
+
         if not os.path.exists(self.config_path):
             # Config doesn't exist - create default
             log.info(f"Config file not found. Creating default: {self.config_path}")
             self.config = DEFAULT_CONFIG.copy()
-            
+
             # Copy bundled filter file to exe directory on first run
             self._ensure_filter_file_exists()
-            
+
             self.save()
             return self.config
-        
-        try:
-            # Load existing config
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                loaded_config = json.load(f)
-            
-            # Merge with defaults to ensure all keys exist
-            self.config = self._merge_with_defaults(loaded_config)
 
-            # Security: Validate config values (v1.0.1 fix)
-            self._validate_config_values()
-
-            # Security: Sanitize file paths in config (v1.0.1 fix)
-            self._sanitize_config_paths()
-
-            return self.config
-            
-        except json.JSONDecodeError as e:
-            # Config file is corrupted
-            log.error(f"Error reading config file: {e}")
-            
+        # Define recovery function for corrupted config
+        def _backup_and_use_defaults():
+            """Backup corrupted config and create new default"""
             # Secure backup using temp file
             try:
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.backup') as tmp:
@@ -172,16 +164,37 @@ class ConfigLoader:
                 log.info(f"Corrupted config backed up to: {backup_path}")
             except Exception as backup_error:
                 log.warning(f"Could not backup corrupted config: {backup_error}")
-            
+
             # Create new default config
             self.config = DEFAULT_CONFIG.copy()
             self.save()
+
+        # Load config with error handling (v1.2)
+        def _load_json():
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+
+        loaded_config = safe_execute(
+            _load_json,
+            "loading config JSON",
+            default_return=None,
+            recovery_func=_backup_and_use_defaults
+        )
+
+        if loaded_config is None:
+            # Load failed, defaults already set by recovery
             return self.config
-        
-        except Exception as e:
-            log.error(f"Unexpected error loading config: {e}")
-            self.config = DEFAULT_CONFIG.copy()
-            return self.config
+
+        # Merge with defaults to ensure all keys exist
+        self.config = self._merge_with_defaults(loaded_config)
+
+        # Security: Validate config values (v1.0.1 fix, v1.2 centralized)
+        self._validate_config_values()
+
+        # Security: Sanitize file paths in config (v1.0.1 fix, v1.2 centralized)
+        self._sanitize_config_paths()
+
+        return self.config
         
     def _ensure_filter_file_exists(self) -> None:
         """
@@ -515,13 +528,139 @@ class ConfigLoader:
     def get_all(self) -> Dict[str, Any]:
         """
         Get entire configuration dictionary
-        
+
         Returns:
             dict: Complete configuration
         """
         if self.config is None:
             self.load()
         return self.config.copy()
+
+    # ========================================================================
+    # HOT-RELOAD METHODS (v1.2)
+    # ========================================================================
+
+    def watch_for_changes(self, enable: bool = True) -> None:
+        """
+        Enable or disable file watching for automatic config reload
+
+        Starts a FileWatcher to monitor config.json for external changes.
+        When the file changes, automatically reloads and notifies callbacks.
+
+        Args:
+            enable: True to start watching, False to stop
+
+        Example:
+            >>> config_loader.register_callback(on_config_changed)
+            >>> config_loader.watch_for_changes(enable=True)
+            >>> # Edit config.json externally
+            >>> # on_config_changed() will be called automatically
+        """
+        if enable:
+            if self._watching:
+                log.debug("Config file watcher already running")
+                return
+
+            try:
+                # Import FileWatcher (v1.0.3 feature)
+                from file_watcher import FileWatcher
+
+                # Start watching config file
+                self._watcher = FileWatcher()
+                self._watcher.watch_file(self.config_path, self._on_config_changed)
+                self._watcher.start()
+
+                self._watching = True
+                log.info("Config file watcher enabled")
+
+            except ImportError:
+                log.warning("watchdog not installed - config hot-reload disabled")
+                log.warning("Install with: pip install watchdog")
+            except Exception as e:
+                log.error(f"Failed to start config file watcher: {e}")
+
+        else:
+            # Stop watching
+            if self._watcher:
+                try:
+                    self._watcher.stop()
+                    self._watcher = None
+                    self._watching = False
+                    log.info("Config file watcher stopped")
+                except Exception as e:
+                    log.error(f"Error stopping config file watcher: {e}")
+
+    def register_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """
+        Register callback to be notified when config reloads
+
+        Args:
+            callback: Function that takes new config dict as argument
+
+        Example:
+            >>> def on_config_reloaded(new_config):
+            ...     print(f"Config reloaded: {new_config}")
+            >>> config_loader.register_callback(on_config_reloaded)
+        """
+        if callback not in self._reload_callbacks:
+            self._reload_callbacks.append(callback)
+            log.debug(f"Registered config reload callback: {callback.__name__}")
+
+    def unregister_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """
+        Unregister a previously registered callback
+
+        Args:
+            callback: Callback function to remove
+        """
+        if callback in self._reload_callbacks:
+            self._reload_callbacks.remove(callback)
+            log.debug(f"Unregistered config reload callback: {callback.__name__}")
+
+    def _on_config_changed(self) -> None:
+        """
+        Internal callback when config file changes externally
+
+        This method:
+        1. Backs up current config
+        2. Reloads config from file
+        3. Notifies all registered callbacks
+        4. Restores backup if reload fails
+
+        Note: Called automatically by FileWatcher, don't call directly.
+        """
+        log.info("Config file changed externally, reloading...")
+
+        # Backup current config
+        old_config = self.config.copy() if self.config else DEFAULT_CONFIG.copy()
+
+        try:
+            # Reload config
+            new_config = self.load()
+
+            # Notify all callbacks
+            for callback in self._reload_callbacks:
+                try:
+                    callback(new_config)
+                except Exception as e:
+                    log.error(f"Config reload callback failed ({callback.__name__}): {e}")
+
+            log.info("Config reload successful")
+
+        except Exception as e:
+            # Reload failed - restore backup
+            log.error(f"Config reload failed: {e}")
+            self.config = old_config
+            log.warning("Restored previous config")
+
+    def is_watching(self) -> bool:
+        """
+        Check if file watcher is active
+
+        Returns:
+            bool: True if watching for config changes
+        """
+        return self._watching
 
 
 def create_default_files():

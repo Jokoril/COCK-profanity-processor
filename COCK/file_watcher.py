@@ -39,7 +39,8 @@ class FilterFileHandler(FileSystemEventHandler):
     Handle filter file change events
 
     Monitors a specific file for modifications and triggers a callback
-    when the file changes. Includes debouncing to prevent rapid reloads.
+    when the file changes. Uses trailing-edge debounce to wait for
+    file writes to complete before triggering.
     """
 
     def __init__(self, filepath: str, callback: Callable):
@@ -50,14 +51,19 @@ class FilterFileHandler(FileSystemEventHandler):
             filepath: Absolute path to file to monitor
             callback: Function to call when file changes
         """
+        import threading
         self.filepath = Path(filepath).resolve()
         self.callback = callback
-        self.last_modified = 0
-        self.debounce_seconds = 0.5  # Wait 500ms after last change
+        self.debounce_seconds = 0.3  # Wait 300ms after LAST change (trailing edge)
+        self._timer = None
+        self._lock = threading.Lock()
 
     def on_modified(self, event):
         """
         File modified event handler
+
+        Uses trailing-edge debounce: waits for events to stop,
+        then triggers callback after debounce period.
 
         Args:
             event: FileSystemEvent from watchdog
@@ -70,16 +76,20 @@ class FilterFileHandler(FileSystemEventHandler):
         if changed_file != self.filepath:
             return
 
-        # Debounce rapid changes
-        current_time = time.time()
-        if current_time - self.last_modified < self.debounce_seconds:
-            log.debug(f"Debounced change to {self.filepath.name}")
-            return
+        # Trailing-edge debounce: cancel existing timer, start new one
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                log.debug(f"Reset debounce timer for {self.filepath.name}")
 
-        self.last_modified = current_time
-        log.info(f"Filter file changed: {self.filepath}")
+            # Start new timer - callback fires after debounce_seconds of no events
+            import threading
+            self._timer = threading.Timer(self.debounce_seconds, self._trigger_callback)
+            self._timer.start()
 
-        # Call reload callback
+    def _trigger_callback(self):
+        """Execute callback after debounce period"""
+        log.info(f"File change detected (after debounce): {self.filepath}")
         try:
             self.callback()
         except Exception as e:

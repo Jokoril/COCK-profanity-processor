@@ -292,13 +292,42 @@ if PYQT5_AVAILABLE:
                 parent: Parent widget (ChatCensorTool instance) for accessing update_checker and help_manager
             """
             super().__init__(parent)
-            
+
             self.config = config.copy()  # Work with a copy
             self.filter_stats = filter_stats or {}
             self.filter_file_changed = False  # Track if filter file was changed
             self.original_filter_file = config.get('filter_file', '')
-            
+
             self.init_ui()
+
+            # Setup file watcher for filter file (v1.2)
+            self._setup_filter_file_watcher()
+
+        def _setup_filter_file_watcher(self):
+            """Setup QFileSystemWatcher for filter file auto-refresh (v1.2)"""
+            from PyQt5.QtCore import QFileSystemWatcher
+            self._filter_watcher = QFileSystemWatcher(self)
+            filter_file = self.config.get('filter_file', '')
+            if filter_file and os.path.exists(filter_file):
+                self._filter_watcher.addPath(filter_file)
+                self._filter_watcher.fileChanged.connect(self._on_filter_file_changed)
+
+        def _on_filter_file_changed(self, path):
+            """Handle filter file external change (v1.2)"""
+            # Re-add path (QFileSystemWatcher removes it after change on some platforms)
+            if os.path.exists(path) and path not in self._filter_watcher.files():
+                self._filter_watcher.addPath(path)
+
+            # Reload filter entries if we have the method
+            if hasattr(self, 'load_filter_entries'):
+                self.load_filter_entries()
+
+        def showEvent(self, event):
+            """Refresh filter list when dialog is shown (v1.2)"""
+            super().showEvent(event)
+            # Reload filter entries to pick up external changes
+            if hasattr(self, 'load_filter_entries'):
+                self.load_filter_entries()
         
         def init_ui(self):
             """Initialize the user interface"""
@@ -1064,7 +1093,10 @@ if PYQT5_AVAILABLE:
             try:
                 with open(filter_file, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
-                
+
+                # Track if user modifies filter list via UI (v1.2)
+                self._filter_modified = False
+
                 # Parse ALL filter words (pre-culled - original file)
                 self.all_filter_words_original = []
                 for line in lines:
@@ -1155,7 +1187,8 @@ if PYQT5_AVAILABLE:
                 
                 # Add to original list
                 self.all_filter_words_original.append(text)
-                
+                self._filter_modified = True  # Mark as modified (v1.2)
+
                 # If it's Latin-only, also add to supported list
                 import filter_loader
                 loader = filter_loader.FilterLoader()
@@ -1204,7 +1237,9 @@ if PYQT5_AVAILABLE:
                         self.all_filter_words_original.remove(word)
                     if word in self.all_filter_words_supported:
                         self.all_filter_words_supported.remove(word)
-                
+
+                self._filter_modified = True  # Mark as modified (v1.2)
+
                 # Update backwards compatibility
                 self.all_filter_words = self.all_filter_words_supported
                 
@@ -1975,7 +2010,14 @@ if PYQT5_AVAILABLE:
                 self.save_button.setText("💾 Saved!")
                 from PyQt5.QtCore import QTimer
                 QTimer.singleShot(2000, lambda: self.save_button.setText("💾 Save Settings"))
-                
+
+                # Refresh filter list to show current state (v1.2)
+                if hasattr(self, 'load_filter_entries'):
+                    self.load_filter_entries()
+
+                # Reset filter modified flag after save (v1.2)
+                self._filter_modified = False
+
             except Exception as e:
                 from PyQt5.QtWidgets import QMessageBox
                 QMessageBox.critical(
@@ -2061,8 +2103,9 @@ if PYQT5_AVAILABLE:
             self.config['byte_limit'] = byte_limit if byte_limit > 0 else 9999
             self.config['character_limit'] = char_limit if char_limit > 0 else 9999
             
-            # Save filter list changes if modified (save ORIGINAL list, not filtered)
-            if hasattr(self, 'all_filter_words_original') and self.all_filter_words_original:
+            # Save filter list changes ONLY if user modified via UI (v1.2 fix)
+            # This prevents overwriting external changes to the filter file
+            if getattr(self, '_filter_modified', False) and hasattr(self, 'all_filter_words_original'):
                 filter_file = self.config.get('filter_file', '')
                 if filter_file and os.path.exists(filter_file):
                     try:
@@ -2072,6 +2115,7 @@ if PYQT5_AVAILABLE:
                             f.write(f"# Supported (Latin-only): {len(self.all_filter_words_supported)}\n\n")
                             for word in sorted(self.all_filter_words_original):
                                 f.write(f"{word}\n")
+                        print(f"Filter list saved ({len(self.all_filter_words_original)} entries)")
                     except Exception as e:
                         print(f"WARNING: Failed to save filter list: {e}")
             

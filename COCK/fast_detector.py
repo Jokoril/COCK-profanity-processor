@@ -15,7 +15,6 @@ Algorithm Version: 4.0 (Production)
 """
 
 import re
-import time
 from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 from enum import Enum
@@ -814,6 +813,7 @@ class FastCensorDetector:
 
         Enables filter list updates without restarting the application (v1.0.2 feature).
         v1.0.3: Added performance monitoring.
+        v1.2: Migrated to use centralized error_handler module.
 
         Args:
             new_automaton: New Aho-Corasick automaton from FilterLoader.reload()
@@ -823,15 +823,27 @@ class FastCensorDetector:
             loader.reload()
             detector.update_automaton(loader.automaton)
         """
-        # Performance monitoring (v1.0.3)
-        start_time = time.perf_counter()
+        from error_handler import monitor_performance
 
-        self.automaton = new_automaton
+        # Update automaton with performance monitoring (v1.2)
+        with monitor_performance("Automaton update", warn_threshold_ms=10):
+            self.automaton = new_automaton
 
-        # Log performance (v1.0.3)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        log.debug(f"Automaton updated in {elapsed_ms:.3f}ms")
         log.info("Filter automaton updated - new entries now active")
+
+    def update_whitelist(self, new_whitelist):
+        """
+        Update the whitelist for live reload (v1.2)
+
+        Args:
+            new_whitelist: New whitelist set from WhitelistManager
+        """
+        from error_handler import monitor_performance
+
+        with monitor_performance("Whitelist update", warn_threshold_ms=10):
+            self.whitelist = set(w.lower() for w in new_whitelist)
+
+        log.info(f"Whitelist updated - {len(self.whitelist)} entries now active")
 
     def get_stats(self) -> Dict:
         """
