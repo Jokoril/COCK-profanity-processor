@@ -273,17 +273,17 @@ class FastCensorDetector:
             # Extract all letters (including extended Latin), collapse into single word
             letters = re.findall(rf'[{LATIN_CHAR_CLASS}]', matched_text)
             collapsed = ''.join(letters)
-            print(f"[DETECTOR] Pattern collapse: '{matched_text}' -> '{collapsed}'")
+            log.debug(f"Pattern collapse: '{matched_text}' -> '{collapsed}'")
             return collapsed
-        
+
         collapsed_text = re.sub(pattern, collapse_match, text)
-        
+
         # Only log if something changed
         if collapsed_text != text:
-            print(f"[DETECTOR] Pre-processing: '{text}' -> '{collapsed_text}'")
-        
+            log.debug(f"Pre-processing: '{text}' -> '{collapsed_text}'")
+
         return collapsed_text
-    
+
     def collapse_spaced_patterns_with_mapping(self, text: str) -> Tuple[str, Optional[List[Tuple[int, int, str]]]]:
         """
         Collapse spaced patterns and return mapping information
@@ -314,16 +314,16 @@ class FastCensorDetector:
             
             # Store mapping info
             collapse_info.append((start_pos, end_pos, collapsed))
-            
-            print(f"[DETECTOR] Pattern collapse: '{matched_text}' -> '{collapsed}' (pos {start_pos}-{end_pos})")
+
+            log.debug(f"Pattern collapse: '{matched_text}' -> '{collapsed}' (pos {start_pos}-{end_pos})")
             return collapsed
         
         collapsed_text = re.sub(pattern, collapse_match, text)
-        
+
         # Only log if something changed
         if collapsed_text != text:
-            print(f"[DETECTOR] Pre-processing: '{text}' -> '{collapsed_text}'")
-        
+            log.debug(f"Pre-processing: '{text}' -> '{collapsed_text}'")
+
         return collapsed_text, collapse_info if collapse_info else None
     
     def detect_all(self, text: str, provided_collapse_mapping: Optional[List[Tuple[int, int, str]]] = None) -> Dict:
@@ -485,17 +485,17 @@ class FastCensorDetector:
                     
                     # Check if embedded
                     is_standalone = (filtered_lower == combined_lower)
-                    
-                    print(f"[DETECTOR DEBUG] Aho-Corasick whitelist check: '{filtered_lower}' in whitelist")
-                    print(f"[DETECTOR DEBUG]   combined_lower: '{combined_lower}'")
-                    print(f"[DETECTOR DEBUG]   is_standalone: {is_standalone}")
-                    
+
+                    log.debug(f"Aho-Corasick whitelist check: '{filtered_lower}' in whitelist")
+                    log.debug(f"  combined_lower: '{combined_lower}'")
+                    log.debug(f"  is_standalone: {is_standalone}")
+
                     if not is_standalone:
                         # Embedded and whitelisted - skip this detection
-                        print(f"[DETECTOR DEBUG]   -> SKIPPING Aho-Corasick detection (embedded)")
+                        log.debug(f"  -> SKIPPING Aho-Corasick detection (embedded)")
                         continue
-                    
-                    print(f"[DETECTOR DEBUG]   -> KEEPING Aho-Corasick detection (standalone)")
+
+                    log.debug(f"  -> KEEPING Aho-Corasick detection (standalone)")
                 
                 found_words.add(filtered_word)  # Track that we found this word
                 
@@ -510,7 +510,7 @@ class FastCensorDetector:
                 
                 flagged_results.append(result)
                 window_desc = ' + '.join([f"'{w}'" for w in det['window_words']])
-                print(f"[DETECTOR] Sliding window found via Aho-Corasick: '{filtered_word}' in {det['window_size']}-word window {window_desc} (positions {det['window_start']}-{det['window_end']})")
+                log.debug(f"Sliding window found via Aho-Corasick: '{filtered_word}' in {det['window_size']}-word window {window_desc} (positions {det['window_start']}-{det['window_end']})")
         
         return {
             'flagged': flagged_results,
@@ -765,22 +765,22 @@ class FastCensorDetector:
             if filtered_lower in self.whitelist:
                 # Whitelisted = has embedding protection
                 # Check if embedded in combined window string
-                
+
                 # Is it the entire combined string (standalone)?
                 is_standalone = (filtered_lower == combined_lower)
-                
-                print(f"[DETECTOR DEBUG] Whitelist check: '{filtered_lower}' in whitelist")
-                print(f"[DETECTOR DEBUG]   combined_lower: '{combined_lower}'")
-                print(f"[DETECTOR DEBUG]   is_standalone: {is_standalone}")
-                
+
+                log.debug(f"Whitelist check: '{filtered_lower}' in whitelist")
+                log.debug(f"  combined_lower: '{combined_lower}'")
+                log.debug(f"  is_standalone: {is_standalone}")
+
                 if not is_standalone:
                     # Embedded in combined window string
                     # Apply embedding rule -> Don't flag
-                    print(f"[DETECTOR DEBUG]   -> SKIPPING (embedded)")
+                    log.debug(f"  -> SKIPPING (embedded)")
                     continue
-                
+
                 # If standalone in combined string, still flag
-                print(f"[DETECTOR DEBUG]   -> FLAGGING (standalone)")
+                log.debug(f"  -> FLAGGING (standalone)")
             
             # Skip if matched text is pure alphanumeric (including extended Latin)
             # (optimization: pure alphanumeric is less likely to be problematic)

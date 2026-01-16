@@ -525,18 +525,9 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             else:
                 self.log("Toggle hotkeys hotkey registered successfully")
             
-            # Load initial hotkeys_enabled state from config
-            self.hotkeys_enabled = self.config.get('hotkeys_enabled', True)
-            
-            # If hotkeys should start disabled, stop them now
-            if not self.hotkeys_enabled:
-                if self.hotkey and self.hotkey.is_active():
-                    self.hotkey.stop()
-                if self.force_hotkey and self.force_hotkey.is_active():
-                    self.force_hotkey.stop()
-                self.log("Hotkeys initialized in DISABLED state")
-            else:
-                self.log("Hotkeys initialized in ENABLED state")
+            # Always start with hotkeys enabled (toggle state is temporary, not persisted)
+            self.hotkeys_enabled = True
+            self.log("Hotkeys initialized in ENABLED state")
             
             return True
             
@@ -789,13 +780,9 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.toggle_hotkeys()
     
     def toggle_hotkeys(self):
-        """Toggle optimization hotkeys on/off"""
+        """Toggle optimization hotkeys on/off (temporary - resets on restart)"""
         self.hotkeys_enabled = not self.hotkeys_enabled
-        
-        # Update config
-        self.config['hotkeys_enabled'] = self.hotkeys_enabled
-        self.config_loader.save(self.config)
-        
+
         if self.hotkeys_enabled:
             # Enable hotkeys
             if self.hotkey and not self.hotkey.is_active():
@@ -1375,6 +1362,10 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             # Recreate special_char instance with new config (for character changes)
             import special_char_interspacing
             self.optimizer.special_char = special_char_interspacing.SpecialCharInterspacing(new_config)
+
+            # Update detector's config reference so word pattern cache rebuilds on next detection
+            if hasattr(self, 'detector') and self.detector:
+                self.detector.config = new_config
 
             self.logger.info("Optimizer settings updated from config file")
         except Exception as e:

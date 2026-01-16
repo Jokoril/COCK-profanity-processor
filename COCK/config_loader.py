@@ -43,8 +43,8 @@ DEFAULT_CONFIG = {
     "hotkey": "f12",  # Global hotkey combination
     "force_optimize_hotkey": "ctrl+f12",  # Force optimize hotkey
     "toggle_hotkeys_hotkey": "ctrl+alt+c",  # Toggle hotkeys on/off
-    "hotkeys_enabled": True,  # Whether hotkeys are currently enabled
-    
+    # Note: hotkeys_enabled is NOT persisted - toggle state is temporary (resets on restart)
+
     "keyboard_delay_ms": 100,
     
     "sliding_window_size": 3,
