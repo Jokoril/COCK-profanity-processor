@@ -65,6 +65,12 @@ import settings_dialog
 import update_checker
 import help_manager
 
+# Import UI provider abstraction (Phase 3B)
+from ui import (
+    UIProvider, PyQt5Provider, NullProvider, get_provider,
+    NotificationConfig, TrayMenuConfig, TrayMenuItem
+)
+
 # For console window control on Windows
 if sys.platform == 'win32':
     import ctypes
@@ -259,7 +265,10 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
         self.manual_overlay = None  # Renamed from strict_overlay
         # permissive_feedback removed - no longer used
         self.tray_icon = None
-        
+
+        # UI Provider (Phase 3B) - abstracts PyQt5/NullProvider
+        self.ui: UIProvider = get_provider()
+
         # State
         self.running = False
         self.processing_hotkey = False  # Prevent re-entrant calls
@@ -537,175 +546,61 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
     
     def show_notification(self, title: str, message: str, notification_type: str = 'info', duration: int = None):
         """
-        Show a brief notification popup
-        
+        Show a brief notification popup using UI provider (Phase 3B)
+
         Args:
             title: Notification title
             message: Notification message
             notification_type: 'clean', 'optimized', or 'info'
             duration: Optional duration in milliseconds (overrides config if provided)
         """
-        if not PYQT5_AVAILABLE:
+        if not self.ui.is_available():
             return
-        
+
         # Check if notifications are enabled for this type
         notifications_config = self.config.get('notifications', {})
         enabled = notifications_config.get('enabled', True)
-        
+
         # Check specific type settings
         if notification_type == 'clean':
             enabled = notifications_config.get('show_clean_messages', True)
         elif notification_type == 'optimized':
             enabled = notifications_config.get('show_optimized_messages', True)
-        
+
         if not enabled:
             return
-        
+
         # Get duration from parameter or config
         if duration is None:
-            duration_ms = notifications_config.get('duration_ms', 2000)  # Default 2 seconds
+            duration_ms = notifications_config.get('duration_ms', 2000)
         else:
             duration_ms = duration
-        
-        try:
-            from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout
-            from PyQt5.QtCore import QTimer, Qt
-            from PyQt5.QtGui import QFont
-            
-            # Create custom notification widget
-            notification = QWidget()
-            notification.setWindowFlags(
-                Qt.WindowStaysOnTopHint | 
-                Qt.FramelessWindowHint | 
-                Qt.Tool
-            )
-            notification.setAttribute(Qt.WA_TranslucentBackground)
-            notification.setAttribute(Qt.WA_ShowWithoutActivating)
-            
-            layout = QVBoxLayout()
-            
-            # Get scaling factor
-            scale = self.config.get('ui', {}).get('notification_scale', 1.0)
-            
-            # Title label
-            title_label = QLabel(title)
-            title_font = QFont()
-            title_font.setBold(True)
-            title_font.setPointSize(int(10 * scale))
-            title_label.setFont(title_font)
-            layout.addWidget(title_label)
-            
-            # Message label
-            message_label = QLabel(message)
-            message_label.setWordWrap(True)
-            message_font = QFont()
-            message_font.setPointSize(int(9 * scale))
-            message_label.setFont(message_font)
-            layout.addWidget(message_label)
-            
-            # Apply padding scale
-            padding = int(12 * scale)
-            layout.setContentsMargins(padding, padding, padding, padding)
-            layout.setSpacing(int(8 * scale))
-            
-            notification.setLayout(layout)
-            
-            # Style based on theme
-            theme = self.config.get('ui', {}).get('theme', 'dark')
-            if theme == 'dark':
-                notification.setStyleSheet("""
-                    QWidget {
-                        background-color: #2b2b2b;
-                        color: white;
-                        border: 2px solid #555;
-                        border-radius: 8px;
-                        padding: 10px;
-                    }
-                """)
-            else:
-                notification.setStyleSheet("""
-                    QWidget {
-                        background-color: #f0f0f0;
-                        color: black;
-                        border: 2px solid #ccc;
-                        border-radius: 8px;
-                        padding: 10px;
-                    }
-                """)
-            
-            # Position in bottom-right corner
-            from PyQt5.QtWidgets import QDesktopWidget
-            desktop = QDesktopWidget()
-            screen_rect = desktop.availableGeometry()
-            
-            notification.adjustSize()
-            
-            # Get position and offsets from config
-            position = self.config.get('ui', {}).get('notification_position', 'bottom-right')
-            offset_x = self.config.get('ui', {}).get('notification_offset_x', 20)
-            offset_y = self.config.get('ui', {}).get('notification_offset_y', 20)
-            
-            # Calculate position based on config (with 9 presets)
-            if position == 'top-left':
-                x = offset_x
-                y = offset_y
-            elif position == 'top-center':
-                x = (screen_rect.width() - notification.width()) // 2 + offset_x
-                y = offset_y
-            elif position == 'top-right':
-                x = screen_rect.width() - notification.width() - offset_x
-                y = offset_y
-            elif position == 'center-left':
-                x = offset_x
-                y = (screen_rect.height() - notification.height()) // 2 + offset_y
-            elif position == 'center':
-                x = (screen_rect.width() - notification.width()) // 2 + offset_x
-                y = (screen_rect.height() - notification.height()) // 2 + offset_y
-            elif position == 'center-right':
-                x = screen_rect.width() - notification.width() - offset_x
-                y = (screen_rect.height() - notification.height()) // 2 + offset_y
-            elif position == 'bottom-left':
-                x = offset_x
-                y = screen_rect.height() - notification.height() - offset_y
-            elif position == 'bottom-center':
-                x = (screen_rect.width() - notification.width()) // 2 + offset_x
-                y = screen_rect.height() - notification.height() - offset_y
-            elif position == 'bottom-right':
-                x = screen_rect.width() - notification.width() - offset_x
-                y = screen_rect.height() - notification.height() - offset_y
-            else:  # fallback to center
-                x = (screen_rect.width() - notification.width()) // 2 + offset_x
-                y = (screen_rect.height() - notification.height()) // 2 + offset_y
-            
-            notification.move(x, y)
-            
-            # Store reference to prevent garbage collection
-            if not hasattr(self, '_active_notifications'):
-                self._active_notifications = []
-            self._active_notifications.append(notification)
 
-            # Play notification sound if enabled
-            self.play_sound('notification')
-            
-            notification.show()
-            
-            # Auto-close after configured duration
-            def close_and_cleanup():
-                notification.close()
-                if notification in self._active_notifications:
-                    self._active_notifications.remove(notification)
-            
-            if duration_ms > 0:
-                QTimer.singleShot(duration_ms, close_and_cleanup)
-            
-        except Exception as e:
-            self.log(f"Failed to show notification: {e}")
-            import traceback
-            traceback.print_exc()
+        # Get UI settings from config
+        ui_config = self.config.get('ui', {})
+
+        # Create notification config
+        config = NotificationConfig(
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            duration_ms=duration_ms,
+            position=ui_config.get('notification_position', 'bottom-right'),
+            scale=ui_config.get('notification_scale', 1.0),
+            offset_x=ui_config.get('notification_offset_x', 20),
+            offset_y=ui_config.get('notification_offset_y', 20),
+            theme=ui_config.get('theme', 'dark')
+        )
+
+        # Show notification via provider
+        self.ui.show_notification(config)
+
+        # Play notification sound if enabled
+        self.play_sound('notification')
     
     def init_ui(self):
         """Initialize UI components (must be called after QApplication is created)"""
-        if not PYQT5_AVAILABLE:
+        if not self.ui.is_available():
             return
         
         try:
@@ -1132,7 +1027,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
     
     def setup_tray_icon(self):
         """Setup system tray icon"""
-        if not PYQT5_AVAILABLE:
+        if not self.ui.is_available():
             return
         
         try:
@@ -1495,7 +1390,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.log("Settings updated without detector rebuild")
 
         # Recreate overlays with new scale settings
-        if PYQT5_AVAILABLE:
+        if self.ui.is_available():
             # Get old scales
             old_notification_scale = getattr(self, '_last_notification_scale', 1.0)
             old_prompt_scale = getattr(self, '_last_prompt_scale', 1.0)
@@ -1576,7 +1471,7 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
             self.logger.error(f"Filter reload failed: {error}")
 
             # Show user notification only if safe to do so (v1.0.3, v1.2 thread-safe)
-            if show_ui_notifications and PYQT5_AVAILABLE and hasattr(self, 'show_notification'):
+            if show_ui_notifications and self.ui.is_available() and hasattr(self, 'show_notification'):
                 self.show_notification(
                     "Filter Reload Failed",
                     f"Error: {error}\nUsing previous filter list.",
@@ -1670,9 +1565,9 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
     def show_settings(self):
         """Show settings dialog (non-modal)"""
         self.log("show_settings() called")  # Debug
-        
-        if not PYQT5_AVAILABLE:
-            self.log("PyQt5 not available, cannot show settings")
+
+        if not self.ui.is_available():
+            self.log("UI not available, cannot show settings")
             return
         
         try:
@@ -2031,13 +1926,13 @@ class COCK(QObject if PYQT5_AVAILABLE else object):
     
     def show_stats(self):
         """Show statistics"""
-        if not PYQT5_AVAILABLE:
+        if not self.ui.is_available():
             stats = self.get_stats_text()
             print(stats)
             return
-        
+
         stats = self.get_stats_text()
-        
+
         QMessageBox.information(
             None,
             "COCK Profanity Processor - Statistics",
@@ -2076,8 +1971,8 @@ Optimization:
     
     def export_filter_list(self):
         """Export loaded filter list to a text file"""
-        if not PYQT5_AVAILABLE:
-            print("Export filter list requires PyQt5")
+        if not self.ui.is_available():
+            print("Export filter list requires UI")
             return
         
         try:
@@ -2157,7 +2052,7 @@ Optimization:
         """Quit application"""
         self.log("Quitting application...")
         self.running = False
-        
+
         # Stop hotkey listeners
         if self.hotkey:
             self.hotkey.stop()
@@ -2165,22 +2060,22 @@ Optimization:
             self.force_hotkey.stop()
         if hasattr(self, 'toggle_hotkey') and self.toggle_hotkey:
             self.toggle_hotkey.stop()
-        
+
         # Close debug window if open
         if hasattr(self, 'debug_window') and self.debug_window:
             self.debug_window.close()
-        
-        # Quit Qt application
-        if PYQT5_AVAILABLE and self.app:
-            self.app.quit()
-        
+
+        # Quit application via provider (Phase 3B)
+        if self.ui.is_available():
+            self.ui.quit()
+
         # Exit Python
         sys.exit(0)
     
     def restart_application(self):
         """Restart the application"""
         self.log("Restarting application...")
-        
+
         # Stop hotkeys
         if self.hotkey:
             self.hotkey.stop()
@@ -2188,10 +2083,10 @@ Optimization:
             self.force_hotkey.stop()
         if hasattr(self, 'toggle_hotkey') and self.toggle_hotkey:
             self.toggle_hotkey.stop()
-        
-        # Close Qt application if running
-        if PYQT5_AVAILABLE and self.app:
-            self.app.quit()
+
+        # Close application via provider (Phase 3B)
+        if self.ui.is_available():
+            self.ui.quit()
         
         # Sanitize arguments to prevent command injection
         safe_args = []
@@ -2214,37 +2109,35 @@ Optimization:
             if not self.initialize():
                 print("Failed to initialize. Exiting.")
                 return 1
-            
+
             # Setup hotkey
             if not self.setup_hotkey():
                 self.logger.warning("Running without hotkey support")
-            
-            # Setup GUI if available
-            if PYQT5_AVAILABLE:
-                # Use existing app if provided (from splash screen), otherwise create new one
-                if not self.app:
-                    self.app = QApplication(sys.argv)
-                    
-                self.app.setApplicationName("COCK Profanity Processor")
-                self.app.setQuitOnLastWindowClosed(False)  # Keep running in tray
+
+            # Setup GUI if available (Phase 3B: use provider pattern)
+            if self.ui.is_available():
+                # Create or reuse app via provider (handles existing QApplication from splash)
+                self.app = self.ui.create_app(sys.argv)
+
+                # Configure app via provider
+                self.ui.set_app_name("COCK Profanity Processor")
 
                 # Set application-wide icon
                 icon_path = path_manager.get_resource_file('icons/icon.ico')
                 if os.path.exists(icon_path):
-                    from PyQt5.QtGui import QIcon
-                    self.app.setWindowIcon(QIcon(icon_path))
-                
+                    self.ui.set_app_icon(icon_path)
+
                 # Initialize UI components now that QApplication exists
                 self.init_ui()
-                
+
                 # Setup tray icon
                 self.setup_tray_icon()
-                
+
                 self.running = True
                 print("\n" + "="*50)
                 print("COCK Profanity Processor is running!")
                 print(f"Mode: {self.router.get_mode().value}")
-                
+
                 # Get hotkey string from config (handle both formats)
                 hotkey_config = self.config.get('hotkey', 'ctrl+shift+v')
                 if isinstance(hotkey_config, dict):
@@ -2252,17 +2145,17 @@ Optimization:
                 else:
                     hotkey_str = hotkey_config
                 print(f"Hotkey: {hotkey_str}")
-                
+
                 print("Right-click tray icon for options")
                 print("="*50 + "\n")
 
                 # Show settings window after splash screen fades out completely
                 # Splash duration is 3000ms, so delay 3200ms to ensure fade is complete
                 self.log("Scheduling auto-show settings in 3200ms...")
-                QTimer.singleShot(3200, self.show_settings)
-                
-                # Run event loop
-                return self.app.exec_()
+                self.ui.schedule_callback(3200, self.show_settings)
+
+                # Run event loop via provider
+                return self.ui.run_event_loop()
             else:
                 # Console mode
                 self.running = True
